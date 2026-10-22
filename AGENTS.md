@@ -6,6 +6,11 @@
   - `bun test`
   - `bun run lint`, `bun run typecheck`, `bun run format:check`
 
+- Key documentation
+  - [docs/deploying.md](docs/deploying.md)
+  - [docs/tiers.md](docs/tiers.md)
+  - [docs/files.md](docs/files.md)
+
 - Rules
   - Public repo: no real domain, email, account id or local path. Examples use `example.com`.
 
