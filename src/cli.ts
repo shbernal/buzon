@@ -10,7 +10,8 @@ function print<T>(json: boolean, payload: T, text: (payload: T) => string): void
 }
 
 export async function run(argv: string[]): Promise<number> {
-  const { command, flags } = parseArgv(argv)
+  const parsed = parseArgv(argv)
+  const { command, flags } = parsed
   const json = flags.json === true
 
   if (flags.help || flags.h || command === 'help' || command === '') {
@@ -26,6 +27,45 @@ export async function run(argv: string[]): Promise<number> {
     case 'init': {
       const { init, initText } = await import('./commands/init.ts')
       print(json, await init(flags, !json && interactive()), initText)
+      return 0
+    }
+    case 'new':
+    case 'list':
+    case 'show':
+    case 'note':
+    case 'delete':
+    case 'reissue':
+    case 'adopt': {
+      const commands = await import('./commands/addresses.ts')
+      const { readConfig } = await import('./core/config.ts')
+      const { createApi } = await import('./core/api.ts')
+      const config = readConfig()
+      const context = { config, api: createApi(config) }
+      switch (command) {
+        case 'new':
+          print(json, await commands.create(parsed, context), commands.createText)
+          break
+        case 'list':
+          print(json, commands.list(parsed), commands.listText)
+          break
+        case 'show':
+          print(json, await commands.show(parsed, context), commands.showText)
+          break
+        case 'note':
+          print(json, commands.setNote(parsed, context), commands.setNoteText)
+          break
+        case 'delete':
+          print(json, await commands.remove(parsed, context), commands.removeText)
+          break
+        case 'reissue': {
+          const result = await commands.reissue(parsed, context)
+          print(json, result, commands.reissueText)
+          return result.missing.length > 0 ? 1 : 0
+        }
+        case 'adopt':
+          print(json, await commands.adopt(parsed, context), commands.adoptText)
+          break
+      }
       return 0
     }
     default:

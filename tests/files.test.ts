@@ -35,7 +35,15 @@ describe('atomic writes', () => {
 
   test('the registry is a plain file', () => {
     const file = join(dir(), 'registry.json')
-    const registry = { addresses: { 'a@example.com': { createdAt: '2026-01-01T00:00:00.000Z' } } }
+    const registry = {
+      addresses: {
+        'a@example.com': {
+          tier: 'ste' as const,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          addressId: 1,
+        },
+      },
+    }
     writeRegistry(registry, file)
     expect(mode(file)).toBe(0o644)
     expect(readRegistry(file)).toEqual(registry)

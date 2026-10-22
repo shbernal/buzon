@@ -1,35 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { ApiError, createApi } from '../src/core/api.ts'
 import { verify } from '../src/commands/init.ts'
-
-type Call = { url: string; headers: Headers; method: string; body?: string }
-
-function fake(respond: (call: Call) => Response) {
-  const calls: Call[] = []
-  const fetcher = (async (url: string, init: RequestInit) => {
-    const call = {
-      url,
-      headers: new Headers(init.headers),
-      method: init.method ?? 'GET',
-      body: init.body as string | undefined,
-    }
-    calls.push(call)
-    return respond(call)
-  }) as unknown as typeof fetch
-  return { calls, fetcher }
-}
-
-/** The rejection message of a promise that must fail. */
-async function failure(promise: Promise<unknown>): Promise<string> {
-  return promise.then(
-    () => 'resolved',
-    (error: unknown) => (error instanceof Error ? error.message : String(error)),
-  )
-}
-
-const json = (body: unknown, status = 200) => Response.json(body, { status })
-const secrets = (key: string) => (key === 'site-password' ? 'site' : 'admin')
-const config = { url: 'https://mail.example.com', domain: 'example.com' }
+import { config, failure, fake, json, secrets, type Call } from './fake.ts'
 
 describe('api', () => {
   test('sends the site password, the JWT and, for /admin, the admin password', async () => {

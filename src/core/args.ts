@@ -6,7 +6,7 @@ export type Parsed = {
   flags: Record<string, string | boolean>
 }
 
-const VALUE_FLAGS = new Set(['url', 'domain'])
+const VALUE_FLAGS = new Set(['url', 'domain', 'site', 'note', 'tier'])
 
 export function parseArgv(argv: string[]): Parsed {
   const positionals: string[] = []
