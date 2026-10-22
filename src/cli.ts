@@ -9,6 +9,13 @@ function print<T>(json: boolean, payload: T, text: (payload: T) => string): void
   console.log(json ? JSON.stringify(payload, null, 2) : text(payload))
 }
 
+async function createContext() {
+  const { readConfig } = await import('./core/config.ts')
+  const { createApi } = await import('./core/api.ts')
+  const config = readConfig()
+  return { config, api: createApi(config) }
+}
+
 export async function run(argv: string[]): Promise<number> {
   const parsed = parseArgv(argv)
   const { command, flags } = parsed
@@ -37,10 +44,7 @@ export async function run(argv: string[]): Promise<number> {
     case 'reissue':
     case 'adopt': {
       const commands = await import('./commands/addresses.ts')
-      const { readConfig } = await import('./core/config.ts')
-      const { createApi } = await import('./core/api.ts')
-      const config = readConfig()
-      const context = { config, api: createApi(config) }
+      const context = await createContext()
       switch (command) {
         case 'new':
           print(json, await commands.create(parsed, context), commands.createText)
@@ -65,6 +69,18 @@ export async function run(argv: string[]): Promise<number> {
         case 'adopt':
           print(json, await commands.adopt(parsed, context), commands.adoptText)
           break
+      }
+      return 0
+    }
+    case 'read':
+    case 'wait':
+    case 'delete-mail': {
+      const commands = await import('./commands/mail.ts')
+      const context = await createContext()
+      if (command === 'read') print(json, await commands.read(parsed, context), commands.readText)
+      if (command === 'wait') print(json, await commands.wait(parsed, context), commands.waitText)
+      if (command === 'delete-mail') {
+        print(json, await commands.removeMail(parsed, context), commands.removeMailText)
       }
       return 0
     }

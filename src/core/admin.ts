@@ -36,9 +36,3 @@ export async function mintJwt(api: Api, id: number): Promise<string> {
   const { jwt } = await api.request<{ jwt: string }>(`/admin/show_password/${id}`)
   return jwt
 }
-
-/** D1 stores `YYYY-MM-DD HH:MM:SS` in UTC. */
-export function serverDate(raw: string): string | undefined {
-  const date = new Date(`${raw.replace(' ', 'T')}Z`)
-  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
-}

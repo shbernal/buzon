@@ -1,19 +1,17 @@
-import { stringFlag, UsageError, type Parsed } from '../core/args.ts'
-import { ApiError, type Api } from '../core/api.ts'
+import { stringFlag, UsageError } from '../core/args.ts'
+import { ApiError } from '../core/api.ts'
 import {
   findServerAddress,
   listServerAddresses,
   mintJwt,
-  serverDate,
   type ServerAddress,
 } from '../core/admin.ts'
-import { normalizeDomain, type Config } from '../core/config.ts'
-import { readCredentials, writeCredentials } from '../core/credentials.ts'
+import { normalizeDomain } from '../core/config.ts'
+import { addressJwt, readCredentials, writeCredentials } from '../core/credentials.ts'
+import { serverDate } from '../core/time.ts'
 import { generateName, parseName, parseSite, parseTier } from '../core/names.ts'
+import { type Context, type Input, resolveAddress } from './context.ts'
 import { readRegistry, writeRegistry, type Registry, type RegistryEntry } from '../core/registry.ts'
-
-export type Context = { config: Config; api: Api }
-type Input = Pick<Parsed, 'positionals' | 'flags'>
 
 export type AddressView = RegistryEntry & { address: string }
 
@@ -23,13 +21,6 @@ const CREATE_ATTEMPTS = 5
 const KEPT = new Set(['lte', 'custom'])
 
 type Created = { jwt: string; address: string; address_id: number }
-
-/** A bare name gets the configured domain. */
-function resolveAddress(raw: string | undefined, config: Config, usage: string): string {
-  if (!raw) throw new UsageError(usage)
-  const address = raw.trim().toLowerCase()
-  return address.includes('@') ? address : `${address}@${config.domain}`
-}
 
 function view(address: string, entry: RegistryEntry): AddressView {
   return { address, ...entry }
@@ -133,8 +124,7 @@ export async function show(
 ): Promise<AddressView & { mails: number }> {
   const address = resolveAddress(positionals[0], config, SHOW_USAGE)
   const { entry } = registered(address)
-  const jwt = readCredentials()[address]
-  if (!jwt) throw new Error(`no credential for ${address}: run \`buzon reissue ${address}\``)
+  const jwt = addressJwt(address)
   const { count } = await api.request<{ count: number }>('/api/mails?limit=1&offset=0', { jwt })
   return { ...view(address, entry), mails: count }
 }

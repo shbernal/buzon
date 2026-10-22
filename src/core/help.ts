@@ -14,6 +14,12 @@ commands:
             (lte and custom addresses need --force)
   reissue   fresh credentials from the admin API: reissue <address> | --all
   adopt     add an address made elsewhere: adopt <address> [--note "…"]
+  read      print mail: read <address> [--latest | --id <n> | --all] [--raw]
+  wait      wait for new mail, print its code, link or whole text:
+            wait <address> [--code | --link] [--from <regex>] [--subject <regex>]
+            [--timeout 300] [--since now|<duration>|<date>]
+            (exits 1 on timeout; --since 10m also takes mail that came before)
+  delete-mail  delete one mail: delete-mail <address> <id>
 
 tiers: ste is one-shot, mte lives for a process, lte is tied to a real account.
 An <address> without @ gets the configured domain.

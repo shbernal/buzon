@@ -8,6 +8,8 @@ export class ApiError extends Error {
     message: string,
     /** Upstream error code, when the body was `{ code, message }` JSON instead of text. */
     readonly code?: string,
+    /** Seconds from a `Retry-After` header, on a 429. */
+    readonly retryAfter?: number,
   ) {
     super(`${path}: ${status} ${message}`)
   }
@@ -32,6 +34,8 @@ export type Api = {
  */
 async function failure(response: Response, path: string): Promise<ApiError> {
   const text = (await response.text()).trim()
+  const retry = Number(response.headers.get('retry-after') ?? Number.NaN)
+  const retryAfter = Number.isFinite(retry) && retry >= 0 ? retry : undefined
   try {
     const body = JSON.parse(text) as { code?: unknown; message?: unknown }
     if (typeof body.message === 'string') {
@@ -40,10 +44,11 @@ async function failure(response: Response, path: string): Promise<ApiError> {
         path,
         body.message,
         typeof body.code === 'string' ? body.code : undefined,
+        retryAfter,
       )
     }
   } catch {}
-  return new ApiError(response.status, path, text || response.statusText)
+  return new ApiError(response.status, path, text || response.statusText, undefined, retryAfter)
 }
 
 /** Secrets are read on first use, so a command that never calls `/admin/*` never needs one. */
