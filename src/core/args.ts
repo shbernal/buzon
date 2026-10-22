@@ -17,6 +17,9 @@ const VALUE_FLAGS = new Set([
   'subject',
   'timeout',
   'since',
+  'tag',
+  'to',
+  'out',
 ])
 
 export function parseArgv(argv: string[]): Parsed {

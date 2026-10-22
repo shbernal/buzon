@@ -21,6 +21,7 @@ describe('paths', () => {
     expect(paths.config).toBe('/x/config/buzon/config.toml')
     expect(paths.wrangler).toBe('/x/config/buzon/wrangler.toml')
     expect(paths.registry).toBe('/x/data/buzon/registry.json')
+    expect(paths.backups).toBe('/x/data/buzon/backups')
     expect(paths.credentials).toBe('/x/state/buzon/credentials.json')
     expect(paths.upstream('v1.13.0')).toBe('/x/cache/buzon/upstream/v1.13.0')
   })

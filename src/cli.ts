@@ -84,6 +84,22 @@ export async function run(argv: string[]): Promise<number> {
       }
       return 0
     }
+    case 'deploy':
+    case 'upgrade':
+    case 'export-db': {
+      const commands = await import('./commands/deploy.ts')
+      const context = await createContext()
+      if (command === 'deploy')
+        print(json, await commands.deploy(parsed, context), commands.deployText)
+      if (command === 'upgrade') {
+        const result = await commands.upgrade(parsed, context, interactive())
+        print(json, result, commands.upgradeText)
+      }
+      if (command === 'export-db') {
+        print(json, await commands.exportDb(parsed, context), commands.exportDbText)
+      }
+      return 0
+    }
     default:
       throw new UsageError(`unknown command "${command}"\n\n${HELP}`)
   }

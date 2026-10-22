@@ -7,6 +7,8 @@ export type Config = {
   url: string
   /** Domain the addresses are created on: `example.com`. */
   domain: string
+  /** Upstream release the instance runs, as `buzon deploy` last shipped it: `v1.13.0`. */
+  tag?: string
 }
 
 export class ConfigMissingError extends Error {
@@ -34,6 +36,13 @@ export function normalizeDomain(raw: string): string {
   return domain
 }
 
+export function normalizeTag(raw: string): string {
+  const tag = raw.trim()
+  if (!/^v\d+\.\d+\.\d+$/.test(tag))
+    throw new Error(`"${raw}" is not a release tag such as v1.13.0`)
+  return tag
+}
+
 export function parseConfig(text: string, file = paths.config): Config {
   let raw: Record<string, unknown>
   try {
@@ -41,10 +50,15 @@ export function parseConfig(text: string, file = paths.config): Config {
   } catch (error) {
     throw new Error(`${file} is not valid TOML`, { cause: error })
   }
-  const { url, domain } = raw
+  const { url, domain, tag } = raw
   if (typeof url !== 'string') throw new Error(`${file}: \`url\` is missing`)
   if (typeof domain !== 'string') throw new Error(`${file}: \`domain\` is missing`)
-  return { url: normalizeUrl(url), domain: normalizeDomain(domain) }
+  const config: Config = { url: normalizeUrl(url), domain: normalizeDomain(domain) }
+  if (tag !== undefined) {
+    if (typeof tag !== 'string') throw new Error(`${file}: \`tag\` must be a string`)
+    config.tag = normalizeTag(tag)
+  }
+  return config
 }
 
 export function readConfig(file = paths.config): Config {
@@ -60,7 +74,9 @@ export function readConfig(file = paths.config): Config {
 
 /** JSON string escapes are valid TOML basic-string escapes, so `JSON.stringify` quotes safely. */
 export function serializeConfig(config: Config): string {
-  return `url = ${JSON.stringify(config.url)}\ndomain = ${JSON.stringify(config.domain)}\n`
+  const lines = [`url = ${JSON.stringify(config.url)}`, `domain = ${JSON.stringify(config.domain)}`]
+  if (config.tag) lines.push(`tag = ${JSON.stringify(config.tag)}`)
+  return `${lines.join('\n')}\n`
 }
 
 export function writeConfig(config: Config, file = paths.config): void {

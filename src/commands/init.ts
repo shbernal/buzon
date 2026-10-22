@@ -1,4 +1,3 @@
-import { createInterface } from 'node:readline/promises'
 import { stringFlag, UsageError, type Parsed } from '../core/args.ts'
 import { ApiError, createApi, type Api } from '../core/api.ts'
 import {
@@ -9,6 +8,7 @@ import {
   type Config,
 } from '../core/config.ts'
 import { paths } from '../core/paths.ts'
+import { withPrompt } from '../core/prompt.ts'
 
 export const INIT_USAGE =
   'usage: buzon init --url <https://mail.example.com> --domain <example.com>'
@@ -16,21 +16,6 @@ export const INIT_USAGE =
 export type InitResult = Config & { file: string; version: string }
 
 type OpenSettings = { version?: string; domains?: string[] }
-
-type Ask = (question: string, fallback?: string) => Promise<string>
-
-/** One interface for every question: a second one would lose input the first had buffered. */
-async function withPrompt<T>(use: (ask: Ask) => Promise<T>): Promise<T> {
-  const rl = createInterface({ input: process.stdin, output: process.stderr })
-  try {
-    return await use(async (question, fallback) => {
-      const hint = fallback ? ` [${fallback}]` : ''
-      return (await rl.question(`${question}${hint}: `)).trim() || fallback || ''
-    })
-  } finally {
-    rl.close()
-  }
-}
 
 function existing(): Partial<Config> {
   try {
@@ -86,7 +71,8 @@ export async function verify(config: Config, api: Api = createApi(config)): Prom
 export async function init(flags: Parsed['flags'], interactive: boolean): Promise<InitResult> {
   const config = await resolveInput(flags, interactive)
   const version = await verify(config)
-  writeConfig(config)
+  const { tag } = existing()
+  writeConfig(tag ? { ...config, tag } : config)
   return { ...config, file: paths.config, version }
 }
 

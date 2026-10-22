@@ -31,6 +31,9 @@ export const paths = {
   get registry() {
     return join(dir('data'), 'registry.json')
   },
+  get backups() {
+    return join(dir('data'), 'backups')
+  },
   get credentials() {
     return join(dir('state'), 'credentials.json')
   },

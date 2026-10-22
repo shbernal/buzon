@@ -31,6 +31,15 @@ describe('config', () => {
     )
   })
 
+  test('keeps the deployed tag, and rejects one that is not a release', () => {
+    const file = join(dir(), 'config.toml')
+    const config = { url: 'https://mail.example.com', domain: 'example.com', tag: 'v1.13.0' }
+    writeConfig(config, file)
+    expect(readConfig(file)).toEqual(config)
+    const base = 'url = "https://mail.example.com"\ndomain = "example.com"\n'
+    expect(() => parseConfig(`${base}tag = "main"\n`)).toThrow('not a release tag')
+  })
+
   test('a missing file points to buzon init', () => {
     const file = join(dir(), 'absent.toml')
     expect(() => readConfig(file)).toThrow(ConfigMissingError)
