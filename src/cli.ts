@@ -3,6 +3,28 @@ import { causeChain } from './core/errors.ts'
 import { HELP } from './core/help.ts'
 import pkg from '../package.json' with { type: 'json' }
 
+export const COMMANDS = [
+  'init',
+  'new',
+  'list',
+  'show',
+  'note',
+  'delete',
+  'reissue',
+  'adopt',
+  'read',
+  'wait',
+  'delete-mail',
+  'deploy',
+  'upgrade',
+  'export-db',
+] as const
+
+type Command = (typeof COMMANDS)[number]
+
+const isCommand = (command: string): command is Command =>
+  (COMMANDS as readonly string[]).includes(command)
+
 const interactive = () => process.stdout.isTTY && process.stdin.isTTY
 
 function print<T>(json: boolean, payload: T, text: (payload: T) => string): void {
@@ -30,6 +52,7 @@ export async function run(argv: string[]): Promise<number> {
     return 0
   }
 
+  if (!isCommand(command)) throw new UsageError(`unknown command "${command}"\n\n${HELP}`)
   switch (command) {
     case 'init': {
       const { init, initText } = await import('./commands/init.ts')
@@ -101,7 +124,7 @@ export async function run(argv: string[]): Promise<number> {
       return 0
     }
     default:
-      throw new UsageError(`unknown command "${command}"\n\n${HELP}`)
+      return command satisfies never
   }
 }
 
