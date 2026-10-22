@@ -1,0 +1,54 @@
+import { parseArgv, UsageError } from './core/args.ts'
+import { causeChain } from './core/errors.ts'
+import { HELP } from './core/help.ts'
+import pkg from '../package.json' with { type: 'json' }
+
+const interactive = () => process.stdout.isTTY && process.stdin.isTTY
+
+function print<T>(json: boolean, payload: T, text: (payload: T) => string): void {
+  console.log(json ? JSON.stringify(payload, null, 2) : text(payload))
+}
+
+export async function run(argv: string[]): Promise<number> {
+  const { command, flags } = parseArgv(argv)
+  const json = flags.json === true
+
+  if (flags.help || flags.h || command === 'help' || command === '') {
+    console.log(HELP)
+    return 0
+  }
+  if (flags.version || flags.v) {
+    console.log(pkg.version)
+    return 0
+  }
+
+  switch (command) {
+    case 'init': {
+      const { init, initText } = await import('./commands/init.ts')
+      print(json, await init(flags, !json && interactive()), initText)
+      return 0
+    }
+    default:
+      throw new UsageError(`unknown command "${command}"\n\n${HELP}`)
+  }
+}
+
+export async function main(argv: string[]): Promise<void> {
+  const json = argv.includes('--json')
+  try {
+    process.exitCode = await run(argv)
+  } catch (error) {
+    const usage = error instanceof UsageError
+    const [message, ...causes] = usage ? [error.message] : causeChain(error)
+    if (json) {
+      console.error(JSON.stringify({ error: message, causes }))
+    } else {
+      console.error(message)
+      for (const cause of causes) console.error(`  caused by: ${cause}`)
+    }
+    if (process.env.BUZON_DEBUG && error instanceof Error && error.stack) {
+      console.error(error.stack)
+    }
+    process.exitCode = usage ? 2 : 1
+  }
+}
