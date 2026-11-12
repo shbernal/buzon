@@ -96,6 +96,7 @@ buzon new lte --site github --note "GitHub account for side projects"
 | Command                          | Does                                                       |
 | -------------------------------- | ---------------------------------------------------------- |
 | `new <ste\|mte\|lte>`            | Create an address, with `--site` and `--note`              |
+| `new custom <name>`              | Create an address with a name you choose, such as `jane`   |
 | `wait <address>`                 | Wait for new mail and print its `--code`, `--link` or text |
 | `read <address>`                 | Print the latest mail, `--all`, or one `--id`              |
 | `list`, `show <address>`         | Registry entries, filtered by `--tier` or `--site`         |

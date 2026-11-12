@@ -20,6 +20,9 @@ then come on stderr as `{"error": …, "causes": […]}`.
 | A process lasting weeks: a trial, one application cycle         | `mte`                          |
 | A real account the user may need again: a job portal, a service | `lte --site <site> --note "…"` |
 
+When the user asks for a specific name, such as `jane@`, use `buzon new custom jane --note "…"`.
+It is kept like `lte`.
+
 When unsure between `mte` and `lte`, pick `lte`: buzon keeps it and its site and note make
 the account findable later.
 

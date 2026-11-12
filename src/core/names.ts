@@ -9,6 +9,7 @@ export const NAME_REGEX = /^(ste|mte|lte)-[0-9]{4}(-[a-z0-9]{1,12})?-[a-z0-9]{3}
 export const MAX_NAME_LENGTH = 30
 
 const SITE = /^[a-z0-9]{1,12}$/
+const CUSTOM = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/
 const ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789'
 
 export function parseTier(raw: string | undefined): Tier {
@@ -16,7 +17,7 @@ export function parseTier(raw: string | undefined): Tier {
   return raw as Tier
 }
 
-export function parseSite(tier: Tier, raw: string | undefined): string | undefined {
+export function parseSite(tier: Tier | 'custom', raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined
   if (tier === 'ste') throw new UsageError('ste addresses are one-shot and take no --site')
   const site = raw.toLowerCase()
@@ -56,4 +57,21 @@ export function parseName(name: string): { tier: Tier; site?: string } | undefin
   if (!match) return undefined
   const site = match[2]?.slice(1)
   return site ? { tier: match[1] as Tier, site } : { tier: match[1] as Tier }
+}
+
+/**
+ * A name outside the scheme, checked here because the instance silently strips characters
+ * outside `ADDRESS_REGEX`. A tier prefix is refused: the cleanup matches on it.
+ */
+export function parseCustomName(raw: string): string {
+  const name = raw.trim().toLowerCase()
+  if (!CUSTOM.test(name) || name.length > MAX_NAME_LENGTH) {
+    throw new UsageError(
+      `a custom name is 1 to ${MAX_NAME_LENGTH} of [a-z0-9.-], starting and ending with a letter or digit, not "${raw}"`,
+    )
+  }
+  if (/^(ste|mte|lte)-/.test(name)) {
+    throw new UsageError(`"${raw}" starts with a tier prefix: use \`buzon new <tier>\` instead`)
+  }
+  return name
 }

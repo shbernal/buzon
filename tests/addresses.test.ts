@@ -57,6 +57,13 @@ function instance(options: { taken?: number } = {}) {
       const row = add(`${name}@${domain}`)
       return json({ jwt: row.jwt, address: row.name, password: null, address_id: row.id })
     }
+    if (url.pathname === '/admin/new_address') {
+      const { name, domain } = JSON.parse(call.body!) as { name: string; domain: string }
+      if (rows.has(`${name}@${domain}`))
+        return new Response('Failed to create address: Address already exists', { status: 400 })
+      const row = add(`${name}@${domain}`)
+      return json({ jwt: row.jwt, address: row.name, password: null, address_id: row.id })
+    }
     if (url.pathname === '/admin/address') {
       const query = url.searchParams.get('query') ?? ''
       const results = [...rows.values()]
@@ -123,6 +130,27 @@ describe('new', () => {
     const entry = readRegistry().addresses[result.address]!
     expect(entry).toMatchObject({ tier: 'lte', site: 'github', note: 'main', addressId: 1 })
     expect(JSON.stringify(readRegistry())).not.toContain('jwt')
+  })
+
+  test('custom takes the name as given, through the admin API', async () => {
+    const server = instance()
+    const result = await create(input(['custom', 'Nerea'], { note: 'creator' }), server.context)
+    expect(result).toMatchObject({ address: 'nerea@example.com', tier: 'custom', note: 'creator' })
+    expect(new URL(server.calls[0]!.url).pathname).toBe('/admin/new_address')
+    expect(readCredentials()).toEqual({ 'nerea@example.com': 'jwt-1' })
+    expect(await failure(create(input(['custom', 'nerea']), server.context))).toContain(
+      '`buzon adopt nerea@example.com`',
+    )
+  })
+
+  test('custom refuses names the instance would mangle or the cleanup would match', async () => {
+    const { context } = instance()
+    for (const name of ['ner ea', 'nerea_', '-nerea', 'nerea.', 'a'.repeat(31)]) {
+      expect(await failure(create(input(['custom', name]), context))).toContain('custom name')
+    }
+    expect(await failure(create(input(['custom', 'ste-promo']), context))).toContain('tier prefix')
+    expect(await failure(create(input(['custom']), context))).toContain('usage')
+    expect(await failure(create(input(['lte', 'nerea']), context))).toContain('usage')
   })
 
   test('--show-token adds the JWT', async () => {

@@ -9,7 +9,7 @@ import {
 import { normalizeDomain } from '../core/config.ts'
 import { addressJwt, readCredentials, writeCredentials } from '../core/credentials.ts'
 import { serverDate } from '../core/time.ts'
-import { generateName, parseName, parseSite, parseTier } from '../core/names.ts'
+import { generateName, parseCustomName, parseName, parseSite, parseTier } from '../core/names.ts'
 import { type Context, type Input, resolveAddress } from './context.ts'
 import { readRegistry, writeRegistry, type Registry, type RegistryEntry } from '../core/registry.ts'
 
@@ -33,6 +33,42 @@ function registered(address: string): { registry: Registry; entry: RegistryEntry
   return { registry, entry }
 }
 
+const NEW_USAGE = 'usage: buzon new <ste|mte|lte> | buzon new custom <name>'
+
+/** A tiered name is generated and retried on collision; a custom name is taken as given. */
+async function createOnInstance(
+  api: Context['api'],
+  tier: RegistryEntry['tier'],
+  site: string | undefined,
+  custom: string | undefined,
+  domain: string,
+): Promise<Created> {
+  if (tier === 'custom') {
+    const address = `${custom}@${domain}`
+    try {
+      return await api.request<Created>('/admin/new_address', {
+        body: { name: custom, domain, enablePrefix: false },
+      })
+    } catch (error) {
+      if (error instanceof ApiError && /already exists/i.test(error.message)) {
+        throw new Error(`${address} already exists: \`buzon adopt ${address}\` adds it`, {
+          cause: error,
+        })
+      }
+      throw error
+    }
+  }
+  for (let attempt = 1; ; attempt++) {
+    const name = generateName(tier, site)
+    try {
+      return await api.request<Created>('/api/new_address', { body: { name, domain } })
+    } catch (error) {
+      const taken = error instanceof ApiError && /already exists/i.test(error.message)
+      if (!taken || attempt >= CREATE_ATTEMPTS) throw error
+    }
+  }
+}
+
 /**
  * The credential is saved before the registry entry, so a failure leaves at worst a server
  * address without a registry entry, and the error names it with the way to recover it.
@@ -41,7 +77,10 @@ export async function create(
   { positionals, flags }: Input,
   { config, api }: Context,
 ): Promise<AddressView & { token?: string }> {
-  const tier = parseTier(positionals[0])
+  const custom = positionals[0] === 'custom'
+  if (positionals.length !== (custom ? 2 : 1)) throw new UsageError(NEW_USAGE)
+  const tier = custom ? 'custom' : parseTier(positionals[0])
+  const name = custom ? parseCustomName(positionals[1]!) : undefined
   const site = parseSite(tier, stringFlag(flags, 'site'))
   const note = stringFlag(flags, 'note')
   const domainFlag = stringFlag(flags, 'domain')
@@ -49,17 +88,7 @@ export async function create(
 
   const registry = readRegistry()
   const credentials = readCredentials()
-
-  let created: Created | undefined
-  for (let attempt = 1; !created; attempt++) {
-    const name = generateName(tier, site)
-    try {
-      created = await api.request<Created>('/api/new_address', { body: { name, domain } })
-    } catch (error) {
-      const taken = error instanceof ApiError && /already exists/i.test(error.message)
-      if (!taken || attempt >= CREATE_ATTEMPTS) throw error
-    }
-  }
+  const created = await createOnInstance(api, tier, site, name, domain)
 
   const { address, jwt } = created
   const recover = `run \`buzon adopt ${address}\` to recover it`

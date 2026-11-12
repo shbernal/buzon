@@ -8,7 +8,7 @@ address and its mail live, and the instance cleans up on its own from the name a
 | `ste`    | One code or link, then nothing more                     | 7 days    | 30 days                         |
 | `mte`    | A process lasting weeks: a trial, one application cycle | 180 days  | until 180 days without new mail |
 | `lte`    | A real account the user may need again                  | forever   | forever                         |
-| `custom` | An address named outside the scheme, added with `adopt` | forever   | forever                         |
+| `custom` | An address with a chosen name: `new custom` or `adopt`  | forever   | forever                         |
 
 `buzon delete` removes an `ste` or `mte` at once. `lte` and `custom` addresses need `--force`.
 
@@ -21,8 +21,13 @@ address and its mail live, and the instance cleans up on its own from the name a
 `YYMM` is the UTC month of creation, `site` is 1 to 12 of `[a-z0-9]` naming the platform
 (`lte` and `mte` only), and `rand3` is three random `[a-z0-9]`. For example
 `lte-2610-github-k3x@example.com` or `ste-2610-9qa@example.com`. The instance's
-`ADDRESS_CHECK_REGEX` accepts nothing else, so every address on it carries a tier prefix that
-the cleanup can match on.
+`ADDRESS_CHECK_REGEX` accepts nothing else from the public API, so every address made there
+carries a tier prefix that the cleanup can match on.
+
+`buzon new custom <name>` creates a name outside the scheme through the admin API, which skips
+that check. buzon checks the name itself: 1 to 30 of `[a-z0-9.-]`, starting and ending with a
+letter or digit, and never starting with `ste-`, `mte-` or `lte-`, which the cleanup would
+match.
 
 ## Cleanup
 
