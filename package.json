@@ -1,6 +1,6 @@
 {
   "name": "@shbernal/buzon",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "CLI and agent skill for a self-hosted cloudflare_temp_email instance: tiered addresses, codes and links, a local registry, and deploys.",
   "keywords": [
     "agent-skill",

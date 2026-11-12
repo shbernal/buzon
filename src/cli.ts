@@ -43,12 +43,12 @@ export async function run(argv: string[]): Promise<number> {
   const { command, flags } = parsed
   const json = flags.json === true
 
-  if (flags.help || flags.h || command === 'help' || command === '') {
-    console.log(HELP)
-    return 0
-  }
   if (flags.version || flags.v) {
     console.log(pkg.version)
+    return 0
+  }
+  if (flags.help || flags.h || command === 'help' || command === '') {
+    console.log(HELP)
     return 0
   }
 
