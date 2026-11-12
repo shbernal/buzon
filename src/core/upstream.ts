@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { writeAtomic } from './files.ts'
 import { paths } from './paths.ts'
 
 const REPO = 'https://github.com/dreamhunter2333/cloudflare_temp_email'
@@ -11,11 +12,23 @@ export function requireTools(): void {
   }
 }
 
-/** The child's stdout goes to stderr, so `--json` output stays alone on stdout. */
-export async function run(cmd: string[], cwd: string): Promise<void> {
-  const child = Bun.spawn(cmd, { cwd, stdin: 'inherit', stdout: 2 as never, stderr: 'inherit' })
+/**
+ * The child's stdout goes to stderr, so `--json` output stays alone on stdout. `input`, when
+ * given, is the child's whole stdin: secret values travel there, never in argv.
+ */
+export async function run(cmd: string[], cwd: string, input?: string): Promise<void> {
+  const stdin = input === undefined ? 'inherit' : Buffer.from(input)
+  const child = Bun.spawn(cmd, { cwd, stdin, stdout: 2 as never, stderr: 'inherit' })
   const code = await child.exited
   if (code !== 0) throw new Error(`\`${cmd.join(' ')}\` failed (exit ${code}) in ${cwd}`)
+}
+
+/** Like `run`, but stdout is returned instead of shown. */
+async function output(cmd: string[], cwd: string): Promise<string> {
+  const child = Bun.spawn(cmd, { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' })
+  const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  if (code !== 0) throw new Error(`\`${cmd.join(' ')}\` failed (exit ${code}) in ${cwd}`)
+  return out
 }
 
 function capture(cmd: string[], cwd?: string): { code: number; out: string } {
@@ -44,22 +57,64 @@ export async function prepare(tag: string): Promise<string> {
   for (const part of ['worker', 'frontend']) {
     await run(['pnpm', 'install', '--frozen-lockfile'], join(dir, part))
   }
-  copyFileSync(paths.wrangler, join(dir, 'worker', 'wrangler.toml'))
+  copyWranglerToml(dir)
   return dir
 }
 
-type WranglerToml = { d1_databases?: { database_name?: string }[] }
+/** The user's `wrangler.toml` into the checkout's worker, again after buzon edits it. */
+export function copyWranglerToml(dir: string): void {
+  copyFileSync(paths.wrangler, join(dir, 'worker', 'wrangler.toml'))
+}
+
+type WranglerToml = { d1_databases?: { database_name?: string; database_id?: string }[] }
+
+function firstDatabase(file: string) {
+  const parsed = Bun.TOML.parse(readFileSync(file, 'utf8')) as WranglerToml
+  return parsed.d1_databases?.[0]
+}
 
 export function databaseName(file = paths.wrangler): string {
-  const parsed = Bun.TOML.parse(readFileSync(file, 'utf8')) as WranglerToml
-  const name = parsed.d1_databases?.[0]?.database_name
+  const name = firstDatabase(file)?.database_name
   if (!name) throw new Error(`${file} names no D1 database`)
   return name
 }
 
-/** `wrangler`, from the checkout's own dependencies. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The D1 database id, or `undefined` while it is missing or a placeholder. */
+export function databaseId(file = paths.wrangler): string | undefined {
+  const id = firstDatabase(file)?.database_id
+  return id && UUID.test(id) ? id : undefined
+}
+
+/** Sets `database_id` of the first D1 binding, keeping the rest of the file as written. */
+export function writeDatabaseId(id: string, file = paths.wrangler): void {
+  const text = readFileSync(file, 'utf8')
+  const block = /^\[\[d1_databases\]\][^\n]*\n(?:(?!\s*\[)[^\n]*(?:\n|$))*/m.exec(text)
+  if (!block) throw new Error(`${file} has no [[d1_databases]] table`)
+  const line = `database_id = ${JSON.stringify(id)}`
+  const body = /^database_id\s*=.*$/m.test(block[0])
+    ? block[0].replace(/^database_id\s*=.*$/m, line)
+    : `${block[0].replace(/\n?$/, '\n')}${line}\n`
+  writeAtomic(file, text.slice(0, block.index) + body + text.slice(block.index + block[0].length))
+}
+
+/** `wrangler`, from a checkout's own dependencies. */
+export type Wrangler = {
+  run: (args: string[], input?: string) => Promise<void>
+  output: (args: string[]) => Promise<string>
+}
+
+export function wranglerIn(dir: string): Wrangler {
+  const cwd = join(dir, 'worker')
+  return {
+    run: (args, input) => run(['pnpm', 'wrangler', ...args], cwd, input),
+    output: (args) => output(['pnpm', '--silent', 'wrangler', ...args], cwd),
+  }
+}
+
 export function wrangler(dir: string, args: string[]): Promise<void> {
-  return run(['pnpm', 'wrangler', ...args], join(dir, 'worker'))
+  return wranglerIn(dir).run(args)
 }
 
 /** The `db/` files the newer checkout has and the older one lacks, oldest first. */

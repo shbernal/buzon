@@ -1,12 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   addedDbFiles,
   changelogMentions,
+  databaseId,
   databaseName,
   templateDiff,
+  writeDatabaseId,
 } from '../src/core/upstream.ts'
 
 /** A fake checkout holding only what the upgrade review reads. */
@@ -66,5 +68,50 @@ describe('databaseName', () => {
   test('fails when there is none', () => {
     const dir = release({ 'wrangler.toml': 'name = "x"\n' })
     expect(() => databaseName(join(dir, 'wrangler.toml'))).toThrow('names no D1 database')
+  })
+})
+
+describe('database_id', () => {
+  const id = '0f8b7a52-3c1d-4e6f-9a2b-1c3d5e7f9a0b'
+
+  test('a placeholder counts as missing', () => {
+    const dir = release({
+      'wrangler.toml':
+        '[[d1_databases]]\ndatabase_name = "mail-db"\ndatabase_id = "<filled in below>"\n',
+    })
+    expect(databaseId(join(dir, 'wrangler.toml'))).toBeUndefined()
+  })
+
+  test('replaces the line in the first D1 table and keeps the rest', () => {
+    const file = join(
+      release({
+        'wrangler.toml':
+          'name = "buzon"\n\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "mail-db"\n' +
+          'database_id = "<filled in below>"\n\n[vars]\nPREFIX = ""\n',
+      }),
+      'wrangler.toml',
+    )
+    writeDatabaseId(id, file)
+    expect(readFileSync(file, 'utf8')).toBe(
+      'name = "buzon"\n\n[[d1_databases]]\nbinding = "DB"\ndatabase_name = "mail-db"\n' +
+        `database_id = "${id}"\n\n[vars]\nPREFIX = ""\n`,
+    )
+    expect(databaseId(file)).toBe(id)
+  })
+
+  test('adds the line when the table has none', () => {
+    const file = join(
+      release({
+        'wrangler.toml':
+          '[[d1_databases]]\nbinding = "DB"\ndatabase_name = "mail-db"\n\n[vars]\nA = 1\n',
+      }),
+      'wrangler.toml',
+    )
+    writeDatabaseId(id, file)
+    expect(databaseId(file)).toBe(id)
+    expect(Bun.TOML.parse(readFileSync(file, 'utf8'))).toEqual({
+      d1_databases: [{ binding: 'DB', database_name: 'mail-db', database_id: id }],
+      vars: { A: 1 },
+    })
   })
 })

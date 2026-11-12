@@ -29,7 +29,8 @@ a local record of which address belongs to which account.
   agent.
 - A local registry of every address with its site and note, so "which address did I use for
   GitHub?" has an answer.
-- Deploys and upgrades of the upstream release, with every database patch shown and confirmed.
+- A first install in one command, then deploys and upgrades of the upstream release, with
+  every database patch shown and confirmed.
 - An agent skill that tells an AI agent when to pick each tier and how to get a code.
 
 ## Why
@@ -58,7 +59,7 @@ buzon reads its passwords from `BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD`,
 the keyring: the Secret Service through `secret-tool` on Linux, the Keychain on macOS.
 
 No instance yet? [docs/deploying.md](docs/deploying.md) goes from a domain on Cloudflare to a
-running one.
+running one, mostly through `buzon init --deploy`.
 
 ## Quickstart
 
@@ -115,6 +116,8 @@ buzon new lte --site github --note "GitHub account for side projects"
 | `read <address>`                 | Print the latest mail, `--all`, or one `--id`              |
 | `list`, `show <address>`         | Registry entries, filtered by `--tier` or `--site`         |
 | `note`, `delete`, `adopt`        | Edit, remove, or take in an address made elsewhere         |
+| `init --deploy`                  | First install: database, schema, secrets and release       |
+| `secrets push`                   | Put the passwords and the JWT secret on the Worker         |
 | `deploy`, `upgrade`, `export-db` | Ship a release, move to a newer one, dump the database     |
 
 Every command takes `--json`. `buzon --help` lists every command and flag.

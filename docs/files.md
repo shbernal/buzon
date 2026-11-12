@@ -12,10 +12,16 @@ or relative, it falls back to the default below.
 | `~/.local/state/buzon/credentials.json` | One JWT per address, mode `0600`                          | yes    |
 | `~/.cache/buzon/upstream/<tag>/`        | Shallow clones of upstream releases                       | no     |
 
-The site and admin passwords are in neither. They live in `BUZON_SITE_PASSWORD` and
-`BUZON_ADMIN_PASSWORD`, or else in the keyring: the Secret Service under
-`service buzon key site-password` and `service buzon key admin-password` on Linux, the
-Keychain under service `buzon`, accounts `site-password` and `admin-password` on macOS.
+`buzon init --deploy` writes the D1 database id into `wrangler.toml`; nothing else in buzon
+edits it.
+
+The site and admin passwords and the Worker's JWT secret are in none of these. They live in
+`BUZON_SITE_PASSWORD`, `BUZON_ADMIN_PASSWORD` and `BUZON_JWT_SECRET`, or else in the keyring:
+the Secret Service under `service buzon key site-password`, `key admin-password` and
+`key jwt-secret` on Linux, the Keychain under service `buzon`, accounts `site-password`,
+`admin-password` and `jwt-secret` on macOS. buzon reads the JWT secret only to push it with
+`buzon secrets push`, and writes it only when it makes a new one
+([deploying.md](deploying.md#4-secrets)).
 
 ## What to version
 
