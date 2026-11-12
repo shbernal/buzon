@@ -1,21 +1,22 @@
 <div align="center">
 
-# buzon
-
-Disposable and long-lived email addresses on your own domain, for you and your agents.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/banner/banner-dark.svg">
+  <img alt="buzon: disposable and long-lived email addresses on your own domain, for you and your agents" src="assets/banner/banner-light.svg">
+</picture>
 
 [![License][license-badge]][license]
 [![Bun][bun-badge]][bun]
 
 ---
 
-[Install](#install) • [Quickstart](#quickstart) • [Commands](#commands) • [Agent skill](#agent-skill) • [Docs](#docs)
+[Install](#install) • [Quickstart](#quickstart) • [Commands](#commands) • [Agent skill](#agent-skill) • [How it works](#how-it-works) • [Docs](#docs)
 
 ---
 
 </div>
 
-<!-- Demo placeholder: a VHS tape of `buzon new ste`, a sign-up, then `buzon wait --code`. -->
+<img alt="buzon new ste creates an address, buzon wait prints the verification code, buzon delete removes it, buzon list shows the registry" src="assets/demo/demo.gif">
 
 buzon is a CLI for a self-hosted [cloudflare_temp_email](https://github.com/dreamhunter2333/cloudflare_temp_email)
 instance, a mail server that runs on a Cloudflare Worker with D1.
@@ -116,6 +117,11 @@ Every command takes `--json`. `buzon --help` lists every command and flag.
 
 ## Agent skill
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/agent-session/agent-session-dark.svg">
+  <img alt="An agent signs up for a trial: it creates an mte address with buzon, submits the form, waits for the code and enters it" src="assets/agent-session/agent-session-light.svg">
+</picture>
+
 [`skills/buzon`](skills/buzon/SKILL.md) teaches an agent to pick the tier, get a code or link,
 and find an address again later. Install it with:
 
@@ -125,6 +131,18 @@ npx skills add shbernal/buzon
 
 A test fails the build when the skill names a command or flag the CLI does not have.
 
+## How it works
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/how-it-works/how-it-works-dark.svg">
+  <img alt="Mail to example.com goes through Cloudflare Email Routing to a Worker and D1; buzon talks to the Worker over HTTPS and keeps a local registry" src="assets/how-it-works/how-it-works-light.svg">
+</picture>
+
+Cloudflare Email Routing hands every message for your domain to the Worker, which stores it in D1.
+A daily cron deletes expired `ste` and `mte` addresses by the tier in their name.
+buzon talks to the Worker over its HTTPS API, and keeps the registry of sites and notes on your
+machine only.
+
 ## Docs
 
 - [Deploying an instance](docs/deploying.md)
@@ -133,6 +151,6 @@ A test fails the build when the skill names a command or flag the CLI does not h
 - [Upgrading](docs/upgrading.md)
 
 [license]: LICENSE
-[license-badge]: https://img.shields.io/github/license/shbernal/buzon?style=for-the-badge&color=7aa2f7
+[license-badge]: https://img.shields.io/github/license/shbernal/buzon?style=for-the-badge&color=c8452f
 [bun]: https://bun.sh
-[bun-badge]: https://img.shields.io/badge/bun-%E2%89%A51.4-7aa2f7?style=for-the-badge&logo=bun&logoColor=white
+[bun-badge]: https://img.shields.io/badge/bun-%E2%89%A51.4-2f5fa7?style=for-the-badge&logo=bun&logoColor=white
