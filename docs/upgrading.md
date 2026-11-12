@@ -19,7 +19,7 @@ applied.
 
 Read the template diff before deploying. Upstream adds vars there, and a new one that matters
 for agent use belongs in `~/.config/buzon/wrangler.toml`, which buzon copies over upstream's
-and never edits. Secrets stay on the Worker across upgrades.
+and an upgrade never edits. Secrets stay on the Worker across upgrades.
 
 To redeploy the current release, after an edit to `wrangler.toml` for example:
 

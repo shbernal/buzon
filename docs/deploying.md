@@ -17,18 +17,11 @@ from nothing to a running instance at `mail.example.com` that receives mail for 
   `pnpm dlx wrangler login` once. Every later Wrangler call runs from the upstream checkout.
 - `CLOUDFLARE_ACCOUNT_ID` in the environment if the login sees more than one account.
 
-## 1. Write the config files
+## 1. Write the Worker config
 
-buzon reads two files from `~/.config/buzon/` ([files.md](files.md)). `buzon init` writes the
-first one, but it checks a live instance, so for a first deploy write it by hand:
-
-```toml
-url = "https://mail.example.com"
-domain = "example.com"
-```
-
-The second is the `wrangler.toml` that buzon copies into the upstream worker on every deploy.
-This one keeps the web UI and the API on one Worker, at a custom domain:
+buzon copies `~/.config/buzon/wrangler.toml` ([files.md](files.md)) into the upstream worker on
+every deploy. This one keeps the web UI and the API on one Worker, at a custom domain, and
+leaves `database_id` for buzon to fill in:
 
 ```toml
 name = "buzon"
@@ -61,7 +54,7 @@ DEFAULT_LANG = "en"
 [[d1_databases]]
 binding = "DB"
 database_name = "buzon-db"
-database_id = "<filled in below>"
+database_id = "<filled in by buzon init --deploy>"
 ```
 
 What the vars do for agent use:
@@ -79,29 +72,7 @@ Extraction runs in local mode by default: rule-based, no AI binding, and no mail
 to a model. It reads the plain-text part, so HTML-only mail gets no saved code, and buzon
 falls back to parsing the HTML itself.
 
-## 2. Get the upstream checkout
-
-```sh
-buzon deploy --tag v1.13.0 --dry-run
-```
-
-This clones the release into `~/.cache/buzon/upstream/v1.13.0`, installs its dependencies,
-builds the frontend and checks the Worker bundle without deploying it. The remaining Wrangler
-commands run from its `worker/` directory.
-
-## 3. Create the database
-
-```sh
-pnpm wrangler d1 create buzon-db
-```
-
-Put the printed id in `database_id` of `~/.config/buzon/wrangler.toml`, then load the schema:
-
-```sh
-pnpm wrangler d1 execute buzon-db --remote --file=../db/schema.sql
-```
-
-## 4. Set the secrets
+## 2. Store the passwords
 
 Pick a site password (every API call needs it) and an admin password, and store both in the
 keyring, where buzon reads them. On Linux, through the Secret Service:
@@ -127,35 +98,46 @@ security add-generic-password -s buzon -a admin-password -w
 `BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD` override the keyring, and are the only source
 on other platforms, in containers and in CI.
 
-Then put them on the Worker, with a random `JWT_SECRET` for the address credentials.
-`PASSWORDS` and `ADMIN_PASSWORDS` are JSON arrays of strings. A bare string fails to parse and
-the instance silently treats it as an empty list, so type `["your-site-password"]`, brackets
-and quotes included:
+## 3. Install
 
 ```sh
-pnpm wrangler secret put JWT_SECRET
+buzon init --deploy --tag v1.13.0 --url https://mail.example.com --domain example.com
 ```
+
+This runs the whole first install:
+
+1. Writes `~/.config/buzon/config.toml` with the URL and the domain.
+2. Clones the release into `~/.cache/buzon/upstream/v1.13.0` and installs its dependencies.
+   Every Wrangler call runs from its `worker/` directory.
+3. Creates the D1 database named in `database_name`, writes its id to `database_id` of
+   `~/.config/buzon/wrangler.toml`, and loads upstream's `db/schema.sql` into it.
+4. Puts the secrets on the Worker, as `buzon secrets push` does (section 4).
+5. Builds and deploys the release, waits until the instance reports `v1.13.0` and accepts the
+   site password, then records the tag in `config.toml`.
+
+Before it creates anything, it checks that both passwords are readable and stores a new random
+`JWT_SECRET` in the keyring, unless one is there already. It stops without creating anything
+when `wrangler.toml` already has a database id, or when the account already has a D1 database
+of that name: it never makes a second one. To finish an install that stopped after the
+database was made, run the remaining steps by hand. If the schema did not load, load it from
+the checkout's `worker/` directory first:
 
 ```sh
-pnpm wrangler secret put PASSWORDS
+pnpm wrangler d1 execute buzon-db --remote --file=../db/schema.sql
 ```
+
+Then push the secrets and deploy:
 
 ```sh
-pnpm wrangler secret put ADMIN_PASSWORDS
+buzon secrets push --tag v1.13.0
 ```
-
-On a Worker that does not exist yet, Wrangler offers to create it with the secret. `buzon
-deploy` never sends secrets, so they stay as set here across deploys and upgrades.
-
-## 5. Deploy
 
 ```sh
 buzon deploy --tag v1.13.0
 ```
 
-buzon deploys, waits until the instance reports `v1.13.0` and accepts the site password, then
-records the tag in `config.toml`. Later deploys of the same release need no `--tag`. Run
-`buzon init` any time to check the instance and the domain again.
+Later deploys of the same release need no `--tag`. Run `buzon init` without `--deploy` any time
+to check the instance and the domain again.
 
 `/health_check` does not answer `OK` on this setup: with the web UI on the same Worker, the
 Worker hands every non-API path to the frontend. To probe by hand, ask the admin API:
@@ -167,7 +149,40 @@ curl -H "x-custom-auth: $SITE_PASSWORD" -H "x-admin-auth: $ADMIN_PASSWORD" \
 
 A fresh instance answers `{"results":[],"count":0}`.
 
-## 6. Route all mail to the Worker
+## 4. Secrets
+
+The Worker reads three secrets: `JWT_SECRET`, which signs every address credential, and
+`PASSWORDS` and `ADMIN_PASSWORDS`, the site and admin passwords. Put them there, after a
+password change for example, with:
+
+```sh
+buzon secrets push
+```
+
+It runs `wrangler secret put` for each, from the checkout of the deployed release (`--tag`
+picks another), with the value on stdin. The passwords come from the same place as for every
+other command, and go up as one-element JSON lists: the Worker treats a bare string as an
+empty list, and then accepts no password at all.
+
+`JWT_SECRET` comes from `BUZON_JWT_SECRET`, or else the keyring entry `jwt-secret`, where
+`init --deploy` stores it. With neither, `secrets push` leaves the Worker's `JWT_SECRET` as it
+is. To replace it:
+
+```sh
+buzon secrets push --rotate-jwt
+```
+
+This makes a new random secret, stores it in the keyring, and pushes it. Every address
+credential signed with the old one stops working, so fetch new ones from the admin API:
+
+```sh
+buzon reissue --all
+```
+
+On a platform without a keyring, set `BUZON_JWT_SECRET` to the secret to push instead.
+`buzon deploy` and `buzon upgrade` never send secrets, so they stay as pushed here.
+
+## 5. Route all mail to the Worker
 
 A catch-all rule sends every address on the zone to the Worker. In the dashboard: Email,
 Email Routing, Routing rules, Catch-all address, action "Send to a Worker", Worker `buzon`.
@@ -179,7 +194,7 @@ curl -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/r
   --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["buzon"]}],"enabled":true}'
 ```
 
-## 7. Admin settings
+## 6. Admin settings
 
 Two settings live in the database, not in `wrangler.toml`. Set them in the admin page at
 `https://mail.example.com/admin`:
