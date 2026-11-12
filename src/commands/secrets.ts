@@ -30,6 +30,17 @@ export type SecretsDeps = {
 
 export const newJwtSecret = () => randomBytes(48).toString('base64url')
 
+/** A JWT secret in the keyring, made when there is none. Returns whether it made one. */
+export function ensureJwtSecret({
+  find = findSecret,
+  store = storeSecret,
+  generate = newJwtSecret,
+}: SecretsDeps = {}): boolean {
+  if (find('jwt-secret')) return false
+  store('jwt-secret', generate())
+  return true
+}
+
 /** The worker parses both password lists as JSON, and a bare string becomes an empty list. */
 const list = (password: string) => JSON.stringify([password])
 

@@ -5,6 +5,8 @@ usage: buzon <command> [options]
 commands:
   init      write the instance URL and mail domain, then check both
             --url <https://mail.example.com>  --domain <example.com>
+            --deploy --tag vX.Y.Z: first install instead, from ~/.config/buzon/wrangler.toml:
+            write the config, create the D1 database, load its schema, push the secrets, deploy
   new       create an address: new <ste|mte|lte> | new custom <name>
             [--site <site>] [--note "…"] [--domain <example.com>] [--show-token]
   list      registry addresses: [--tier <ste|mte|lte|custom>] [--site <site>]

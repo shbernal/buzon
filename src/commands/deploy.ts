@@ -1,22 +1,30 @@
-import { mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { createApi } from '../core/api.ts'
 import { stringFlag, UsageError, type Parsed } from '../core/args.ts'
 import { normalizeTag, writeConfig, type Config } from '../core/config.ts'
 import { paths } from '../core/paths.ts'
 import { withPrompt, type Ask } from '../core/prompt.ts'
+import { secret } from '../core/secrets.ts'
 import {
   addedDbFiles,
   changelogMentions,
   checkout,
+  copyWranglerToml,
+  databaseId,
   databaseName,
   prepare,
   requireTools,
   run,
   templateDiff,
   wrangler,
+  wranglerIn,
+  writeDatabaseId,
+  type Wrangler,
 } from '../core/upstream.ts'
 import type { Context } from './context.ts'
-import { verify } from './init.ts'
+import { initText, resolveInput, verify, type InitResult } from './init.ts'
+import { ensureJwtSecret, pushSecrets, secretsText, type SecretsResult } from './secrets.ts'
 
 export type DeployResult = { tag: string; url: string; dryRun: boolean; version?: string }
 export type ExportResult = { file: string; pruned: string[] }
@@ -74,6 +82,90 @@ export function deploy({ flags }: Pick<Parsed, 'flags'>, context: Context): Prom
 export function deployText(result: DeployResult): string {
   if (result.dryRun) return `${result.tag} built and checked, nothing deployed`
   return `${result.url} runs ${result.version}`
+}
+
+export const INSTALL_USAGE =
+  'usage: buzon init --deploy --tag vX.Y.Z --url <https://mail.example.com> --domain <example.com>'
+
+export type InstallResult = InitResult & {
+  tag: string
+  database: { name: string; id: string }
+  secrets: SecretsResult
+}
+
+const resume = (tag: string) =>
+  `finish an interrupted install with \`buzon secrets push --tag ${tag}\` and \`buzon deploy --tag ${tag}\``
+
+/** Creates the D1 database, refusing when one of that name exists. Returns its id. */
+export async function createDatabase(w: Wrangler, name: string, tag: string): Promise<string> {
+  const listed = await w.output(['d1', 'list', '--json'])
+  const databases = JSON.parse(listed.slice(listed.indexOf('['))) as {
+    name: string
+    uuid: string
+  }[]
+  const found = databases.find((database) => database.name === name)
+  if (found) {
+    throw new Error(
+      `the account already has a D1 database ${name} (${found.uuid}): put its id in database_id ` +
+        `of ${paths.wrangler} and ${resume(tag)}, or name a new database there`,
+    )
+  }
+  const out = await w.output(['d1', 'create', name])
+  say(out.trimEnd())
+  const id = /database_id"?\s*[:=]\s*"([0-9a-f-]{36})"/i.exec(out)?.[1]
+  if (!id) throw new Error(`\`wrangler d1 create ${name}\` printed no database id`)
+  return id
+}
+
+/**
+ * A first install: the config, the database and its schema, the secrets, then the release.
+ * It stops before touching the account when `wrangler.toml` already names a database. The
+ * JWT secret is in the keyring before anything else, so `secrets push` can finish a stopped run.
+ */
+export async function install(
+  flags: Parsed['flags'],
+  interactive: boolean,
+): Promise<InstallResult> {
+  const raw = stringFlag(flags, 'tag')
+  if (!raw) throw new UsageError(INSTALL_USAGE)
+  const tag = normalizeTag(raw)
+  const config = await resolveInput(flags, interactive)
+  if (!existsSync(paths.wrangler)) throw new Error(`no wrangler config at ${paths.wrangler}`)
+  const name = databaseName()
+  const existing = databaseId()
+  if (existing) {
+    throw new Error(`${paths.wrangler} already names D1 database ${existing}: ${resume(tag)}`)
+  }
+  secret('site-password')
+  secret('admin-password')
+  ensureJwtSecret()
+
+  writeConfig(config)
+  const dir = await prepare(tag)
+  const w = wranglerIn(dir)
+  const id = await createDatabase(w, name, tag)
+  writeDatabaseId(id)
+  copyWranglerToml(dir)
+  say(`wrote database_id ${id} to ${paths.wrangler}`)
+  await w.run(['d1', 'execute', name, '--remote', '--file=../db/schema.sql'])
+  const pushed = await pushSecrets(w, 'keep')
+  const shipped = await ship({ config, api: createApi(config) }, tag, false)
+  return {
+    ...config,
+    tag,
+    file: paths.config,
+    version: shipped.version ?? tag,
+    database: { name, id },
+    secrets: pushed,
+  }
+}
+
+export function installText(result: InstallResult): string {
+  return [
+    `created D1 database ${result.database.name} (${result.database.id}) and loaded its schema`,
+    secretsText(result.secrets),
+    initText(result),
+  ].join('\n')
 }
 
 const stamp = () =>

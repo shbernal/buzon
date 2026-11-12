@@ -56,6 +56,11 @@ export async function run(argv: string[]): Promise<number> {
   if (!isCommand(command)) throw new UsageError(`unknown command "${command}"\n\n${HELP}`)
   switch (command) {
     case 'init': {
+      if (flags.deploy === true) {
+        const { install, installText } = await import('./commands/deploy.ts')
+        print(json, await install(flags, !json && interactive()), installText)
+        return 0
+      }
       const { init, initText } = await import('./commands/init.ts')
       print(json, await init(flags, !json && interactive()), initText)
       return 0
