@@ -22,6 +22,10 @@ commands:
   delete-mail  delete one mail: delete-mail <address> <id>
   deploy    build and deploy the pinned upstream release with the local wrangler.toml:
             [--tag vX.Y.Z] [--dry-run]  (secrets stay as they are on the Worker)
+  secrets   put JWT_SECRET, PASSWORDS and ADMIN_PASSWORDS on the Worker from the keyring:
+            secrets push [--tag vX.Y.Z] [--rotate-jwt]
+            (without a stored jwt-secret, JWT_SECRET stays as it is; --rotate-jwt makes and
+            stores a new one, which invalidates every address credential)
   upgrade   move to a newer release, asking before the backup, each db patch and the
             deploy: upgrade --to vX.Y.Z
   export-db dump the D1 database: [--out <dir>]  (keeps the last 12)

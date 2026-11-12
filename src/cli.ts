@@ -16,6 +16,7 @@ export const COMMANDS = [
   'wait',
   'delete-mail',
   'deploy',
+  'secrets',
   'upgrade',
   'export-db',
 ] as const
@@ -105,6 +106,11 @@ export async function run(argv: string[]): Promise<number> {
       if (command === 'delete-mail') {
         print(json, await commands.removeMail(parsed, context), commands.removeMailText)
       }
+      return 0
+    }
+    case 'secrets': {
+      const { secrets, secretsText } = await import('./commands/secrets.ts')
+      print(json, await secrets(parsed), secretsText)
       return 0
     }
     case 'deploy':

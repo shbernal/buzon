@@ -11,11 +11,23 @@ export function requireTools(): void {
   }
 }
 
-/** The child's stdout goes to stderr, so `--json` output stays alone on stdout. */
-export async function run(cmd: string[], cwd: string): Promise<void> {
-  const child = Bun.spawn(cmd, { cwd, stdin: 'inherit', stdout: 2 as never, stderr: 'inherit' })
+/**
+ * The child's stdout goes to stderr, so `--json` output stays alone on stdout. `input`, when
+ * given, is the child's whole stdin: secret values travel there, never in argv.
+ */
+export async function run(cmd: string[], cwd: string, input?: string): Promise<void> {
+  const stdin = input === undefined ? 'inherit' : Buffer.from(input)
+  const child = Bun.spawn(cmd, { cwd, stdin, stdout: 2 as never, stderr: 'inherit' })
   const code = await child.exited
   if (code !== 0) throw new Error(`\`${cmd.join(' ')}\` failed (exit ${code}) in ${cwd}`)
+}
+
+/** Like `run`, but stdout is returned instead of shown. */
+async function output(cmd: string[], cwd: string): Promise<string> {
+  const child = Bun.spawn(cmd, { cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'inherit' })
+  const [out, code] = await Promise.all([new Response(child.stdout).text(), child.exited])
+  if (code !== 0) throw new Error(`\`${cmd.join(' ')}\` failed (exit ${code}) in ${cwd}`)
+  return out
 }
 
 function capture(cmd: string[], cwd?: string): { code: number; out: string } {
@@ -57,9 +69,22 @@ export function databaseName(file = paths.wrangler): string {
   return name
 }
 
-/** `wrangler`, from the checkout's own dependencies. */
+/** `wrangler`, from a checkout's own dependencies. */
+export type Wrangler = {
+  run: (args: string[], input?: string) => Promise<void>
+  output: (args: string[]) => Promise<string>
+}
+
+export function wranglerIn(dir: string): Wrangler {
+  const cwd = join(dir, 'worker')
+  return {
+    run: (args, input) => run(['pnpm', 'wrangler', ...args], cwd, input),
+    output: (args) => output(['pnpm', '--silent', 'wrangler', ...args], cwd),
+  }
+}
+
 export function wrangler(dir: string, args: string[]): Promise<void> {
-  return run(['pnpm', 'wrangler', ...args], join(dir, 'worker'))
+  return wranglerIn(dir).run(args)
 }
 
 /** The `db/` files the newer checkout has and the older one lacks, oldest first. */
