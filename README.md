@@ -41,13 +41,21 @@ and records the long ones.
 
 ## Install
 
-buzon runs on [Bun](https://bun.sh). It reads its passwords from `BUZON_SITE_PASSWORD` and
-`BUZON_ADMIN_PASSWORD`, or else from the keyring: the Secret Service through `secret-tool` on
-Linux, the Keychain on macOS.
+With [Bun](https://bun.sh):
 
 ```sh
 bun add -g @shbernal/buzon
 ```
+
+Or as a standalone binary, with no Bun needed, for `linux-x64`, `linux-arm64`, `darwin-x64` or
+`darwin-arm64` from the [latest release](https://github.com/shbernal/buzon/releases/latest):
+
+```sh
+curl -fsSL https://github.com/shbernal/buzon/releases/latest/download/buzon-linux-x64.tar.gz | tar -xz -C ~/.local/bin
+```
+
+buzon reads its passwords from `BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD`, or else from
+the keyring: the Secret Service through `secret-tool` on Linux, the Keychain on macOS.
 
 No instance yet? [docs/deploying.md](docs/deploying.md) goes from a domain on Cloudflare to a
 running one.

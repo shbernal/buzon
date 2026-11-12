@@ -24,6 +24,8 @@ jobs:
       - run: bun run typecheck
       - run: bun run format:check
       - run: bun run prose
+      - run: bun run compile
+      - run: test "$(dist/linux-x64/buzon --version)" = "$(node -p 'require("./package.json").version')"
 
   commit-check:
     runs-on: ubuntu-latest

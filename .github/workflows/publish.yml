@@ -29,10 +29,11 @@ jobs:
       - run: bun test
       - run: bun run lint
       - run: bun run typecheck
+      - run: bun run compile
       - name: Update npm for trusted publishing
         run: npm install -g npm@latest
       - run: npm publish --access public --provenance --ignore-scripts
       - name: Create the GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --title "$GITHUB_REF_NAME" --generate-notes dist/*.tar.gz dist/SHA256SUMS
         env:
           GH_TOKEN: ${{ github.token }}
