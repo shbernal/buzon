@@ -12,9 +12,10 @@ or relative, it falls back to the default below.
 | `~/.local/state/buzon/credentials.json` | One JWT per address, mode `0600`                          | yes    |
 | `~/.cache/buzon/upstream/<tag>/`        | Shallow clones of upstream releases                       | no     |
 
-The site and admin passwords are in neither: they live in the Secret Service keyring under
-`service buzon key site-password` and `service buzon key admin-password`, or in
-`BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD`.
+The site and admin passwords are in neither. They live in `BUZON_SITE_PASSWORD` and
+`BUZON_ADMIN_PASSWORD`, or else in the keyring: the Secret Service under
+`service buzon key site-password` and `service buzon key admin-password` on Linux, the
+Keychain under service `buzon`, accounts `site-password` and `admin-password` on macOS.
 
 ## What to version
 

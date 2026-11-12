@@ -40,8 +40,9 @@ and records the long ones.
 
 ## Install
 
-buzon runs on [Bun](https://bun.sh) and reads its passwords from the Secret Service keyring
-through `secret-tool`. Until it is published, install it from source:
+buzon runs on [Bun](https://bun.sh). It reads its passwords from `BUZON_SITE_PASSWORD` and
+`BUZON_ADMIN_PASSWORD`, or else from the keyring: the Secret Service through `secret-tool` on
+Linux, the Keychain on macOS. Until it is published, install it from source:
 
 ```sh
 git clone https://github.com/shbernal/buzon
@@ -56,11 +57,19 @@ running one.
 
 ## Quickstart
 
-1. Store the instance's site password in the keyring:
+1. Store the instance's site password in the keyring, on Linux:
 
    ```sh
    secret-tool store --label="buzon site-password" service buzon key site-password
    ```
+
+   On macOS:
+
+   ```sh
+   security add-generic-password -s buzon -a site-password -w
+   ```
+
+   Elsewhere, export `BUZON_SITE_PASSWORD` instead.
 
 2. Point buzon at the instance. It checks that the instance answers, serves the domain and
    accepts the password before writing anything:

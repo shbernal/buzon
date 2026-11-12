@@ -13,7 +13,7 @@ from nothing to a running instance at `mail.example.com` that receives mail for 
 - A workers.dev subdomain on the account. The daily cleanup is a Cron Trigger, and Cloudflare
   refuses cron triggers without one (error 10063). The instance itself stays off workers.dev:
   with `routes` set, Wrangler does not publish the workers.dev URL.
-- `git`, `pnpm` and `secret-tool` on `PATH`, and Wrangler logged in: run
+- `git` and `pnpm` on `PATH`, and Wrangler logged in: run
   `pnpm dlx wrangler login` once. Every later Wrangler call runs from the upstream checkout.
 - `CLOUDFLARE_ACCOUNT_ID` in the environment if the login sees more than one account.
 
@@ -104,7 +104,7 @@ pnpm wrangler d1 execute buzon-db --remote --file=../db/schema.sql
 ## 4. Set the secrets
 
 Pick a site password (every API call needs it) and an admin password, and store both in the
-keyring, where buzon reads them:
+keyring, where buzon reads them. On Linux, through the Secret Service:
 
 ```sh
 secret-tool store --label="buzon site-password" service buzon key site-password
@@ -114,8 +114,18 @@ secret-tool store --label="buzon site-password" service buzon key site-password
 secret-tool store --label="buzon admin-password" service buzon key admin-password
 ```
 
-`BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD` override the keyring, for machines without
-one.
+On macOS, in the Keychain:
+
+```sh
+security add-generic-password -s buzon -a site-password -w
+```
+
+```sh
+security add-generic-password -s buzon -a admin-password -w
+```
+
+`BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD` override the keyring, and are the only source
+on other platforms, in containers and in CI.
 
 Then put them on the Worker, with a random `JWT_SECRET` for the address credentials.
 `PASSWORDS` and `ADMIN_PASSWORDS` are JSON arrays of strings. A bare string fails to parse and
