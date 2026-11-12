@@ -32,3 +32,10 @@ To take a dump at any time:
 ```sh
 buzon export-db
 ```
+
+It keeps the last 12 dumps, so a schedule needs no cleanup. A weekly crontab line takes the full
+path that `command -v buzon` prints, since cron's `PATH` is short:
+
+```crontab
+0 4 * * 1  /path/to/buzon export-db
+```
