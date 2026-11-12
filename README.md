@@ -43,14 +43,10 @@ and records the long ones.
 
 buzon runs on [Bun](https://bun.sh). It reads its passwords from `BUZON_SITE_PASSWORD` and
 `BUZON_ADMIN_PASSWORD`, or else from the keyring: the Secret Service through `secret-tool` on
-Linux, the Keychain on macOS. Until it is published, install it from source:
+Linux, the Keychain on macOS.
 
 ```sh
-git clone https://github.com/shbernal/buzon
-```
-
-```sh
-cd buzon && bun install && bun link
+bun add -g @shbernal/buzon
 ```
 
 No instance yet? [docs/deploying.md](docs/deploying.md) goes from a domain on Cloudflare to a
