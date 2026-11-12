@@ -162,7 +162,7 @@ buzon secrets push
 It runs `wrangler secret put` for each, from the checkout of the deployed release (`--tag`
 picks another), with the value on stdin. The passwords come from the same place as for every
 other command, and go up as one-element JSON lists: the Worker treats a bare string as an
-empty list, and then accepts no password at all.
+empty list, which turns the site password off and locks the admin out.
 
 `JWT_SECRET` comes from `BUZON_JWT_SECRET`, or else the keyring entry `jwt-secret`, where
 `init --deploy` stores it. With neither, `secrets push` leaves the Worker's `JWT_SECRET` as it
