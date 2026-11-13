@@ -6,10 +6,18 @@ import {
   mintJwt,
   type ServerAddress,
 } from '../core/admin.ts'
-import { normalizeDomain } from '../core/config.ts'
+import { isRouted, normalizeDomain, type Config } from '../core/config.ts'
 import { addressJwt, readCredentials, writeCredentials } from '../core/credentials.ts'
 import { serverDate } from '../core/time.ts'
-import { generateName, parseCustomName, parseName, parseSite, parseTier } from '../core/names.ts'
+import {
+  domainOf,
+  generateName,
+  parseCustomName,
+  parseName,
+  parseSite,
+  parseTier,
+} from '../core/names.ts'
+import type { Routing, Rule } from '../core/routing.ts'
 import { type Context, type Input, resolveAddress } from './context.ts'
 import { readRegistry, writeRegistry, type Registry, type RegistryEntry } from '../core/registry.ts'
 
@@ -31,6 +39,61 @@ function registered(address: string): { registry: Registry; entry: RegistryEntry
   const entry = registry.addresses[address]
   if (!entry) throw new Error(`${address} is not in the registry`)
   return { registry, entry }
+}
+
+const routed = (config: Config, address: string) => isRouted(config, domainOf(address))
+
+function routingOf(context: Pick<Context, 'routing'>): Routing {
+  if (!context.routing) throw new Error('this command needs Email Routing access')
+  return context.routing
+}
+
+class RoutingConflict extends Error {}
+
+/**
+ * The rule that sends `address` to the Worker: an existing one, else a new one. A rule for the
+ * address that does anything else is the user's, and is left alone.
+ */
+async function ensureRule(
+  routing: Routing,
+  address: string,
+  rules?: Rule[],
+): Promise<{ ruleId: string; created: boolean }> {
+  const matching = (rules ?? (await routing.rules(domainOf(address)))).filter(
+    (rule) => rule.to === address,
+  )
+  const worker = routing.worker()
+  const ours = matching.find((rule) => rule.worker === worker)
+  if (ours) return { ruleId: ours.id, created: false }
+  if (matching.length > 0) {
+    throw new RoutingConflict(
+      `${address} has an Email Routing rule that does not send it to the Worker ${worker}`,
+    )
+  }
+  return { ruleId: await routing.create(address), created: true }
+}
+
+/** A routed address with its rule, or a usable error that names `buzon route`. */
+async function routeNew(
+  context: Pick<Context, 'routing'>,
+  address: string,
+  entry: RegistryEntry,
+  what: string,
+): Promise<RegistryEntry> {
+  let ruleId: string
+  try {
+    ruleId = (await ensureRule(routingOf(context), address)).ruleId
+  } catch (error) {
+    throw new Error(
+      `${what} ${address}, but it has no routing rule and receives no mail: ` +
+        `run \`buzon route ${address}\``,
+      { cause: error },
+    )
+  }
+  const updated = { ...entry, ruleId }
+  const registry = readRegistry()
+  writeRegistry({ addresses: { ...registry.addresses, [address]: updated } })
+  return updated
 }
 
 const NEW_USAGE = 'usage: buzon new <ste|mte|lte> | buzon new custom <name>'
@@ -75,8 +138,9 @@ async function createOnInstance(
  */
 export async function create(
   { positionals, flags }: Input,
-  { config, api }: Context,
+  context: Context,
 ): Promise<AddressView & { token?: string }> {
+  const { config, api } = context
   const custom = positionals[0] === 'custom'
   if (positionals.length !== (custom ? 2 : 1)) throw new UsageError(NEW_USAGE)
   const tier = custom ? 'custom' : parseTier(positionals[0])
@@ -85,6 +149,12 @@ export async function create(
   const note = stringFlag(flags, 'note')
   const domainFlag = stringFlag(flags, 'domain')
   const domain = domainFlag ? normalizeDomain(domainFlag) : config.domain
+  if (isRouted(config, domain) && !KEPT.has(tier)) {
+    throw new UsageError(
+      `${domain} routes each address with its own rule, which is kept for lte and custom: ` +
+        `make the ${tier} on a catch-all domain`,
+    )
+  }
 
   const registry = readRegistry()
   const credentials = readCredentials()
@@ -116,11 +186,19 @@ export async function create(
       },
     )
   }
-  return { ...view(address, entry), ...(flags['show-token'] === true && { token: jwt }) }
+  const saved = routed(config, address) ? await routeNew(context, address, entry, 'created') : entry
+  return { ...view(address, saved), ...(flags['show-token'] === true && { token: jwt }) }
 }
 
+/** Email Routing applies a new rule after a short delay, and bounces mail until then. */
+const ROUTING_DELAY =
+  'receives mail once Cloudflare applies its new routing rule, within a few minutes'
+
 export function createText(result: AddressView & { token?: string }): string {
-  return result.token ? `${result.address}\n${result.token}` : result.address
+  const lines = [result.address]
+  if (result.token) lines.push(result.token)
+  if (result.ruleId) lines.push(ROUTING_DELAY)
+  return lines.join('\n')
 }
 
 export function list({ flags }: Input): AddressView[] {
@@ -192,8 +270,9 @@ export type DeleteResult = { address: string; alreadyGone: boolean }
  */
 export async function remove(
   { positionals, flags }: Input,
-  { config, api }: Context,
+  context: Context,
 ): Promise<DeleteResult> {
+  const { config, api } = context
   const address = resolveAddress(positionals[0], config, DELETE_USAGE)
   const { registry, entry } = registered(address)
   if (KEPT.has(entry.tier) && flags.force !== true) {
@@ -222,12 +301,36 @@ export async function remove(
       cause: rejected,
     })
   }
+  if (entry.ruleId || routed(config, address)) await removeRule(context, address, entry)
 
   const { [address]: _entry, ...addresses } = registry.addresses
   writeRegistry({ addresses })
   const { [address]: _jwt, ...rest } = credentials
   writeCredentials(rest)
   return { address, alreadyGone }
+}
+
+/**
+ * Runs after the instance lets the address go and before the local entries do, so a failure
+ * here leaves the registry entry for a second `delete` to finish from.
+ */
+async function removeRule(context: Context, address: string, entry: RegistryEntry) {
+  const domain = domainOf(address)
+  try {
+    const routing = routingOf(context)
+    const ids = entry.ruleId
+      ? [entry.ruleId]
+      : (await routing.rules(domain))
+          .filter((rule) => rule.to === address && rule.worker === routing.worker())
+          .map((rule) => rule.id)
+    for (const id of ids) await routing.remove(domain, id)
+  } catch (error) {
+    throw new Error(
+      `${address} is off the instance, but its routing rule is still there: run the same ` +
+        `\`buzon delete\` again`,
+      { cause: error },
+    )
+  }
 }
 
 export const removeText = (result: DeleteResult) =>
@@ -292,10 +395,8 @@ export function reissueText(result: ReissueResult): string {
 const ADOPT_USAGE = 'usage: buzon adopt <address> [--note "…"]'
 
 /** An address made elsewhere, such as the admin UI. A name outside the scheme is `custom`. */
-export async function adopt(
-  { positionals, flags }: Input,
-  { config, api }: Context,
-): Promise<AddressView> {
+export async function adopt({ positionals, flags }: Input, context: Context): Promise<AddressView> {
+  const { config, api } = context
   const address = resolveAddress(positionals[0], config, ADOPT_USAGE)
   const note = stringFlag(flags, 'note')
   const registry = readRegistry()
@@ -313,7 +414,70 @@ export async function adopt(
   }
   writeCredentials({ ...readCredentials(), [address]: jwt })
   writeRegistry({ addresses: { ...registry.addresses, [address]: entry } })
-  return view(address, entry)
+  const saved = routed(config, address) ? await routeNew(context, address, entry, 'adopted') : entry
+  return view(address, saved)
 }
 
 export const adoptText = (result: AddressView) => `adopted ${result.address} as ${result.tier}`
+
+const ROUTE_USAGE = 'usage: buzon route <address> | --all'
+
+export type RouteResult = {
+  routed: { address: string; ruleId: string; created: boolean }[]
+  conflicts: { address: string; error: string }[]
+}
+
+/**
+ * Gives registry addresses on routed domains the rule that sends them to the Worker, and
+ * records it. An existing rule to the Worker is recorded as it is.
+ */
+export async function route({ positionals, flags }: Input, context: Context): Promise<RouteResult> {
+  const { config } = context
+  const all = flags.all === true
+  if (all === positionals.length > 0) throw new UsageError(ROUTE_USAGE)
+  const registry = readRegistry()
+  let targets: string[]
+  if (all) {
+    targets = Object.keys(registry.addresses).filter((address) => routed(config, address))
+  } else {
+    const address = resolveAddress(positionals[0], config, ROUTE_USAGE)
+    if (!registry.addresses[address]) {
+      throw new Error(`${address} is not in the registry: \`buzon adopt ${address}\` adds it`)
+    }
+    if (!routed(config, address)) {
+      throw new UsageError(`${domainOf(address)} is not in \`routed\` in the config`)
+    }
+    targets = [address]
+  }
+
+  const routing = routingOf(context)
+  const rules = new Map<string, Rule[]>()
+  const result: RouteResult = { routed: [], conflicts: [] }
+  for (const address of targets) {
+    const domain = domainOf(address)
+    if (!rules.has(domain)) rules.set(domain, await routing.rules(domain))
+    try {
+      const { ruleId, created } = await ensureRule(routing, address, rules.get(domain))
+      registry.addresses[address] = { ...registry.addresses[address]!, ruleId }
+      result.routed.push({ address, ruleId, created })
+    } catch (error) {
+      if (!(error instanceof RoutingConflict)) {
+        writeRegistry(registry)
+        throw error
+      }
+      result.conflicts.push({ address, error: error.message })
+    }
+  }
+  writeRegistry(registry)
+  return result
+}
+
+export function routeText(result: RouteResult): string {
+  const lines = result.routed.map(({ address, created }) =>
+    created ? `routed ${address}, ${ROUTING_DELAY}` : `${address} was already routed`,
+  )
+  for (const { error } of result.conflicts) {
+    lines.push(`${error}: change or delete that rule, then run \`buzon route\` again`)
+  }
+  return lines.join('\n') || 'no addresses on a routed domain'
+}

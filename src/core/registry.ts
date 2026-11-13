@@ -12,6 +12,8 @@ export type RegistryEntry = {
   note?: string
   createdAt: string
   addressId: number
+  /** The Email Routing rule that sends this address to the Worker, on a routed domain. */
+  ruleId?: string
 }
 
 /** Keyed by full address. */

@@ -1,8 +1,10 @@
 import { UsageError, type Parsed } from '../core/args.ts'
 import type { Api } from '../core/api.ts'
 import type { Config } from '../core/config.ts'
+import type { Routing } from '../core/routing.ts'
 
-export type Context = { config: Config; api: Api }
+/** `routing` is only needed for addresses on a routed domain. */
+export type Context = { config: Config; api: Api; routing?: Routing }
 export type Input = Pick<Parsed, 'positionals' | 'flags'>
 
 /** A bare name gets the configured domain. */

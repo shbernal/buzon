@@ -9,6 +9,8 @@ export type Config = {
   domain: string
   /** Upstream release the instance runs, as `buzon deploy` last shipped it: `v1.13.0`. */
   tag?: string
+  /** Domains without a catch-all to the Worker, where each address gets its own routing rule. */
+  routed?: string[]
 }
 
 export class ConfigMissingError extends Error {
@@ -50,13 +52,18 @@ export function parseConfig(text: string, file = paths.config): Config {
   } catch (error) {
     throw new Error(`${file} is not valid TOML`, { cause: error })
   }
-  const { url, domain, tag } = raw
+  const { url, domain, tag, routed } = raw
   if (typeof url !== 'string') throw new Error(`${file}: \`url\` is missing`)
   if (typeof domain !== 'string') throw new Error(`${file}: \`domain\` is missing`)
   const config: Config = { url: normalizeUrl(url), domain: normalizeDomain(domain) }
   if (tag !== undefined) {
     if (typeof tag !== 'string') throw new Error(`${file}: \`tag\` must be a string`)
     config.tag = normalizeTag(tag)
+  }
+  if (routed !== undefined) {
+    if (!Array.isArray(routed) || !routed.every((item) => typeof item === 'string'))
+      throw new Error(`${file}: \`routed\` must be a list of domains`)
+    config.routed = routed.map(normalizeDomain)
   }
   return config
 }
@@ -76,9 +83,13 @@ export function readConfig(file = paths.config): Config {
 export function serializeConfig(config: Config): string {
   const lines = [`url = ${JSON.stringify(config.url)}`, `domain = ${JSON.stringify(config.domain)}`]
   if (config.tag) lines.push(`tag = ${JSON.stringify(config.tag)}`)
+  if (config.routed?.length) lines.push(`routed = ${JSON.stringify(config.routed)}`)
   return `${lines.join('\n')}\n`
 }
 
 export function writeConfig(config: Config, file = paths.config): void {
   writeAtomic(file, serializeConfig(config))
 }
+
+export const isRouted = (config: Config, domain: string): boolean =>
+  config.routed?.includes(domain) ?? false

@@ -16,6 +16,8 @@ commands:
             (lte and custom addresses need --force)
   reissue   fresh credentials from the admin API: reissue <address> | --all
   adopt     add an address made elsewhere: adopt <address> [--note "…"]
+  route     give addresses on a routed domain their Email Routing rule to the Worker:
+            route <address> | --all  (new, adopt and delete do it on their own)
   read      print mail: read <address> [--latest | --id <n> | --all] [--raw]
   wait      wait for new mail, print its code, link or whole text:
             wait <address> [--code | --link] [--from <regex>] [--subject <regex>]
@@ -33,7 +35,8 @@ commands:
   export-db dump the D1 database: [--out <dir>]  (keeps the last 12)
 
 tiers: ste is one-shot, mte lives for a process, lte is tied to a real account.
-An <address> without @ gets the configured domain.
+An <address> without @ gets the configured domain. A domain listed in \`routed\` in the
+config has no catch-all, so each address there gets its own rule and only lte and custom fit.
 
 options:
   --json     machine-readable output

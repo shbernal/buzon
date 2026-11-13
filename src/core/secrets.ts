@@ -1,9 +1,10 @@
-export type SecretKey = 'site-password' | 'admin-password' | 'jwt-secret'
+export type SecretKey = 'site-password' | 'admin-password' | 'jwt-secret' | 'cloudflare-token'
 
 export const SECRET_ENV: Record<SecretKey, string> = {
   'site-password': 'BUZON_SITE_PASSWORD',
   'admin-password': 'BUZON_ADMIN_PASSWORD',
   'jwt-secret': 'BUZON_JWT_SECRET',
+  'cloudflare-token': 'BUZON_CLOUDFLARE_TOKEN',
 }
 
 interface Keyring {

@@ -20,6 +20,23 @@ describe('config', () => {
     expect(readConfig(file)).toEqual(config)
   })
 
+  test('keeps the routed domains, normalized, and rejects anything but a list of them', () => {
+    const file = join(dir(), 'config.toml')
+    writeConfig({ url: 'https://mail.example.com', domain: 'example.com', routed: [] }, file)
+    expect(readConfig(file).routed).toBeUndefined()
+    const base = 'url = "https://mail.example.com"\ndomain = "example.com"\n'
+    expect(parseConfig(`${base}routed = ["Example.ORG"]\n`).routed).toEqual(['example.org'])
+    const config = {
+      url: 'https://mail.example.com',
+      domain: 'example.com',
+      routed: ['example.org'],
+    }
+    writeConfig(config, file)
+    expect(readConfig(file)).toEqual(config)
+    expect(() => parseConfig(`${base}routed = "example.org"\n`)).toThrow('list of domains')
+    expect(() => parseConfig(`${base}routed = ["no_dots"]\n`)).toThrow('not a domain')
+  })
+
   test('normalizes the URL to its origin and the domain to lower case', () => {
     const text = 'url = "https://Mail.Example.com/some/path/"\ndomain = "Example.COM"\n'
     expect(parseConfig(text)).toEqual({ url: 'https://mail.example.com', domain: 'example.com' })

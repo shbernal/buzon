@@ -75,3 +75,6 @@ export function parseCustomName(raw: string): string {
   }
   return name
 }
+
+/** The part after the `@`. */
+export const domainOf = (address: string): string => address.slice(address.indexOf('@') + 1)
