@@ -12,6 +12,7 @@ export const COMMANDS = [
   'delete',
   'reissue',
   'adopt',
+  'route',
   'read',
   'wait',
   'delete-mail',
@@ -35,8 +36,15 @@ function print<T>(json: boolean, payload: T, text: (payload: T) => string): void
 async function createContext() {
   const { readConfig } = await import('./core/config.ts')
   const { createApi } = await import('./core/api.ts')
+  const { createRouting } = await import('./core/routing.ts')
+  const { secret } = await import('./core/secrets.ts')
+  const { workerName } = await import('./core/upstream.ts')
   const config = readConfig()
-  return { config, api: createApi(config) }
+  const routing = createRouting(
+    () => secret('cloudflare-token'),
+    () => workerName(),
+  )
+  return { config, api: createApi(config), routing }
 }
 
 export async function run(argv: string[]): Promise<number> {
@@ -71,7 +79,8 @@ export async function run(argv: string[]): Promise<number> {
     case 'note':
     case 'delete':
     case 'reissue':
-    case 'adopt': {
+    case 'adopt':
+    case 'route': {
       const commands = await import('./commands/addresses.ts')
       const context = await createContext()
       switch (command) {
@@ -98,6 +107,11 @@ export async function run(argv: string[]): Promise<number> {
         case 'adopt':
           print(json, await commands.adopt(parsed, context), commands.adoptText)
           break
+        case 'route': {
+          const result = await commands.route(parsed, context)
+          print(json, result, commands.routeText)
+          return result.conflicts.length > 0 ? 1 : 0
+        }
       }
       return 0
     }

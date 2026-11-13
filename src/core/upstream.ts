@@ -66,11 +66,22 @@ export function copyWranglerToml(dir: string): void {
   copyFileSync(paths.wrangler, join(dir, 'worker', 'wrangler.toml'))
 }
 
-type WranglerToml = { d1_databases?: { database_name?: string; database_id?: string }[] }
+type WranglerToml = {
+  name?: string
+  d1_databases?: { database_name?: string; database_id?: string }[]
+}
 
 function firstDatabase(file: string) {
   const parsed = Bun.TOML.parse(readFileSync(file, 'utf8')) as WranglerToml
   return parsed.d1_databases?.[0]
+}
+
+/** The Worker's name, which Email Routing rules send mail to. */
+export function workerName(file = paths.wrangler): string {
+  if (!existsSync(file)) throw new Error(`no wrangler config at ${file} to name the Worker`)
+  const name = (Bun.TOML.parse(readFileSync(file, 'utf8')) as WranglerToml).name
+  if (!name) throw new Error(`${file} has no \`name\``)
+  return name
 }
 
 export function databaseName(file = paths.wrangler): string {

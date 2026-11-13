@@ -4,10 +4,21 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createApi } from '../src/core/api.ts'
 import { generateName, NAME_REGEX, parseName, parseSite } from '../src/core/names.ts'
-import { readCredentials } from '../src/core/credentials.ts'
+import { readCredentials, writeCredentials } from '../src/core/credentials.ts'
 import { paths } from '../src/core/paths.ts'
-import { readRegistry } from '../src/core/registry.ts'
-import { adopt, create, list, remove, reissue, setNote, show } from '../src/commands/addresses.ts'
+import { readRegistry, writeRegistry } from '../src/core/registry.ts'
+import {
+  adopt,
+  create,
+  createText,
+  list,
+  remove,
+  reissue,
+  route,
+  setNote,
+  show,
+} from '../src/commands/addresses.ts'
+import { createRouting } from '../src/core/routing.ts'
 import { config, failure, fake, json, secrets, type Call } from './fake.ts'
 
 describe('names', () => {
@@ -291,5 +302,192 @@ describe('reissue and adopt', () => {
       'already in the registry',
     )
     expect(await failure(adopt(input(['nobody']), server.context))).toContain('not on the instance')
+  })
+})
+
+const ok = (result: unknown) => json({ success: true, errors: [], result })
+const fail = (status: number, message: string) =>
+  json({ success: false, errors: [{ code: 1000, message }], result: null }, status)
+
+type CloudflareRule = { id: string; to: string; action: 'worker' | 'forward'; value: string }
+
+/** Email Routing on one zone, `example.org`, as the Cloudflare API answers it. */
+function cloudflare() {
+  const rules = new Map<string, CloudflareRule>()
+  let nextId = 1
+  const state = { failCreate: false, failDelete: false }
+  const add = (to: string, action: CloudflareRule['action'] = 'worker', value = 'buzon') => {
+    const rule = { id: `rule-${nextId++}`, to, action, value }
+    rules.set(rule.id, rule)
+    return rule
+  }
+  const raw = (rule: CloudflareRule) => ({
+    id: rule.id,
+    matchers: [{ type: 'literal', field: 'to', value: rule.to }],
+    actions: [{ type: rule.action, value: [rule.value] }],
+  })
+
+  const { calls, fetcher } = fake((call) => {
+    const url = new URL(call.url)
+    if (call.headers.get('authorization') !== 'Bearer cf-token') return fail(401, 'bad token')
+    if (url.pathname === '/client/v4/zones') {
+      return ok(url.searchParams.get('name') === 'example.org' ? [{ id: 'zone-1' }] : [])
+    }
+    const base = '/client/v4/zones/zone-1/email/routing/rules'
+    if (url.pathname === base && call.method === 'GET') return ok([...rules.values()].map(raw))
+    if (url.pathname === base && call.method === 'POST') {
+      if (state.failCreate) return fail(500, 'internal error')
+      const body = JSON.parse(call.body ?? '') as {
+        matchers: { value: string }[]
+        actions: { value: string[] }[]
+      }
+      return ok(raw(add(body.matchers[0]!.value, 'worker', body.actions[0]!.value[0])))
+    }
+    if (url.pathname.startsWith(`${base}/`) && call.method === 'DELETE') {
+      if (state.failDelete) return fail(500, 'internal error')
+      const id = url.pathname.split('/').pop()!
+      return rules.delete(id) ? ok({ id }) : fail(404, 'not found')
+    }
+    return fail(404, 'no route')
+  })
+  return {
+    rules,
+    add,
+    calls,
+    state,
+    routing: createRouting(
+      () => 'cf-token',
+      () => 'buzon',
+      fetcher,
+    ),
+  }
+}
+
+/** An instance that serves `example.com` and `example.org`, with Email Routing on the second. */
+function routedSetup() {
+  const server = instance()
+  const cf = cloudflare()
+  const context = {
+    ...server.context,
+    config: { ...config, routed: ['example.org'] },
+    routing: cf.routing,
+  }
+  return { server, cf, context }
+}
+
+const org = { domain: 'example.org' }
+
+describe('routed domains', () => {
+  test('new gives a kept address its rule and says when it receives mail', async () => {
+    const { cf, context } = routedSetup()
+    const result = await create(input(['custom', 'jane'], org), context)
+    expect(result).toMatchObject({ address: 'jane@example.org', ruleId: 'rule-1' })
+    expect([...cf.rules.values()]).toEqual([
+      { id: 'rule-1', to: 'jane@example.org', action: 'worker', value: 'buzon' },
+    ])
+    expect(readRegistry().addresses['jane@example.org']!.ruleId).toBe('rule-1')
+    expect(createText(result)).toContain('a few minutes')
+  })
+
+  test('new on a catch-all domain never calls Cloudflare', async () => {
+    const { cf, context } = routedSetup()
+    const result = await create(input(['ste']), context)
+    expect(result.ruleId).toBeUndefined()
+    expect(createText(result)).toBe(result.address)
+    expect(cf.calls).toHaveLength(0)
+  })
+
+  test('new refuses ste and mte on a routed domain before calling anything', async () => {
+    const { server, cf, context } = routedSetup()
+    for (const tier of ['ste', 'mte']) {
+      expect(await failure(create(input([tier], org), context))).toContain('catch-all domain')
+    }
+    expect(server.calls).toHaveLength(0)
+    expect(cf.calls).toHaveLength(0)
+  })
+
+  test('a failed rule keeps the address, and route finishes it', async () => {
+    const { cf, context } = routedSetup()
+    cf.state.failCreate = true
+    const message = await failure(create(input(['lte'], { ...org, site: 'bank' }), context))
+    const [address] = Object.keys(readRegistry().addresses)
+    expect(message).toContain(`buzon route ${address}`)
+    expect(readRegistry().addresses[address!]!.ruleId).toBeUndefined()
+
+    cf.state.failCreate = false
+    expect(await route(input([address!]), context)).toEqual({
+      routed: [{ address: address!, ruleId: 'rule-1', created: true }],
+      conflicts: [],
+    })
+    expect(readRegistry().addresses[address!]!.ruleId).toBe('rule-1')
+  })
+
+  test('route --all records existing rules and reports ones that go elsewhere', async () => {
+    const { server, cf, context } = routedSetup()
+    server.add('lucia@example.org')
+    server.add('contact@example.org')
+    server.add('john@example.com')
+    const existing = cf.add('lucia@example.org')
+    cf.add('contact@example.org', 'forward', 'someone@example.net')
+    // `adopt` routes on its own, so the entries are written as an older buzon left them.
+    const entry = { tier: 'custom' as const, createdAt: '2026-10-01T12:00:00.000Z', addressId: 1 }
+    writeRegistry({
+      addresses: {
+        'lucia@example.org': entry,
+        'contact@example.org': entry,
+        'john@example.com': entry,
+      },
+    })
+
+    const result = await route(input([], { all: true }), context)
+    expect(result.routed).toEqual([
+      { address: 'lucia@example.org', ruleId: existing.id, created: false },
+    ])
+    expect(result.conflicts.map((c) => c.address)).toEqual(['contact@example.org'])
+    expect(cf.rules.size).toBe(2)
+    expect(readRegistry().addresses['lucia@example.org']!.ruleId).toBe(existing.id)
+    expect(await failure(route(input(['john@example.com']), context))).toContain('`routed`')
+  })
+
+  test('adopt routes an address made elsewhere', async () => {
+    const { server, cf, context } = routedSetup()
+    server.add('nerea@example.org')
+    expect(await adopt(input(['nerea@example.org']), context)).toMatchObject({ ruleId: 'rule-1' })
+    expect(cf.rules.get('rule-1')!.to).toBe('nerea@example.org')
+  })
+
+  test('delete removes the rule, and a failed removal is finished by a second delete', async () => {
+    const { server, cf, context } = routedSetup()
+    const jane = await create(input(['custom', 'jane'], org), context)
+    cf.state.failDelete = true
+    expect(await failure(remove(input([jane.address], { force: true }), context))).toContain(
+      'run the same `buzon delete` again',
+    )
+    expect(server.rows.size).toBe(0)
+    expect(readRegistry().addresses[jane.address]).toBeDefined()
+
+    cf.state.failDelete = false
+    expect((await remove(input([jane.address], { force: true }), context)).alreadyGone).toBe(true)
+    expect(cf.rules.size).toBe(0)
+    expect(readRegistry()).toEqual({ addresses: {} })
+  })
+
+  test('delete finds the rule of an address routed before buzon recorded it', async () => {
+    const { server, cf, context } = routedSetup()
+    server.add('lucia@example.org')
+    cf.add('lucia@example.org')
+    cf.add('contact@example.org', 'forward', 'someone@example.net')
+    writeRegistry({
+      addresses: {
+        'lucia@example.org': {
+          tier: 'custom',
+          createdAt: '2026-10-01T12:00:00.000Z',
+          addressId: 1,
+        },
+      },
+    })
+    writeCredentials({ 'lucia@example.org': 'jwt-1' })
+    await remove(input(['lucia@example.org'], { force: true }), context)
+    expect([...cf.rules.values()].map((rule) => rule.to)).toEqual(['contact@example.org'])
   })
 })
