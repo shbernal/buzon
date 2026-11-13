@@ -23,6 +23,10 @@ then come on stderr as `{"error": …, "causes": […]}`.
 When the user asks for a specific name, such as `jane@`, use `buzon new custom jane --note "…"`.
 It is kept like `lte`.
 
+On a domain the user routes address by address, a new address starts receiving mail a few
+minutes after `new` returns, and mail sent sooner bounces. Wait before a form sends it anything. If `new` says the address
+has no routing rule, run the `buzon route <address>` it names.
+
 When unsure between `mte` and `lte`, pick `lte`: buzon keeps it and its site and note make
 the account findable later.
 

@@ -116,6 +116,7 @@ buzon new lte --site github --note "GitHub account for side projects"
 | `read <address>`                 | Print the latest mail, `--all`, or one `--id`              |
 | `list`, `show <address>`         | Registry entries, filtered by `--tier` or `--site`         |
 | `note`, `delete`, `adopt`        | Edit, remove, or take in an address made elsewhere         |
+| `route <address>`                | Give an address on a routed domain its routing rule        |
 | `init --deploy`                  | First install: database, schema, secrets and release       |
 | `secrets push`                   | Put the passwords and the JWT secret on the Worker         |
 | `deploy`, `upgrade`, `export-db` | Ship a release, move to a newer one, dump the database     |

@@ -194,6 +194,33 @@ curl -X PUT "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/email/routing/r
   --data '{"matchers":[{"type":"all"}],"actions":[{"type":"worker","value":["buzon"]}],"enabled":true}'
 ```
 
+### A domain without a catch-all
+
+A domain that also carries real mailboxes or forwards, such as `contact@example.org` to a
+personal inbox, can keep its catch-all off and route each address on its own. List it in
+`~/.config/buzon/config.toml`:
+
+```toml
+routed = ["example.org"]
+```
+
+On a routed domain, `buzon new` and `buzon adopt` create a rule that sends that one address to
+the Worker named in `wrangler.toml`, and `buzon delete` removes it. Cloudflare applies a new rule
+within a few minutes and bounces mail until then. Only `lte` and `custom` addresses fit there:
+the cleanup deletes expired `ste` and `mte` addresses without buzon, which would leave their rules
+behind. `buzon route --all` gives a rule to registry addresses that lack one, and records rules
+that already send an address to the Worker.
+
+buzon reaches the Cloudflare API with a token of its own, made under My Profile, API Tokens,
+with Zone, Zone, Read and Zone, Email Routing Rules, Edit on the routed zones. Store it in the
+keyring:
+
+```sh
+secret-tool store --label="buzon cloudflare-token" service buzon key cloudflare-token
+```
+
+Or set `BUZON_CLOUDFLARE_TOKEN`.
+
 ## 6. Admin settings
 
 Two settings live in the database, not in `wrangler.toml`. Set them in the admin page at

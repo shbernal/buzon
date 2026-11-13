@@ -5,7 +5,7 @@ or relative, it falls back to the default below.
 
 | File                                    | Holds                                                     | Secret |
 | --------------------------------------- | --------------------------------------------------------- | ------ |
-| `~/.config/buzon/config.toml`           | Instance URL, mail domain, deployed release tag           | no     |
+| `~/.config/buzon/config.toml`           | Instance URL, mail domain, release tag, routed domains    | no     |
 | `~/.config/buzon/wrangler.toml`         | The Worker config copied into every deploy                | no     |
 | `~/.local/share/buzon/registry.json`    | Every address with its tier, site, note and creation date | no     |
 | `~/.local/share/buzon/backups/`         | `export-db` dumps, the last 12 kept                       | yes    |
@@ -15,11 +15,12 @@ or relative, it falls back to the default below.
 `buzon init --deploy` writes the D1 database id into `wrangler.toml`; nothing else in buzon
 edits it.
 
-The site and admin passwords and the Worker's JWT secret are in none of these. They live in
-`BUZON_SITE_PASSWORD`, `BUZON_ADMIN_PASSWORD` and `BUZON_JWT_SECRET`, or else in the keyring:
-the Secret Service under `service buzon key site-password`, `key admin-password` and
-`key jwt-secret` on Linux, the Keychain under service `buzon`, accounts `site-password`,
-`admin-password` and `jwt-secret` on macOS. buzon reads the JWT secret only to push it with
+The site and admin passwords, the Worker's JWT secret and the Cloudflare token for routed
+domains are in none of these. They live in `BUZON_SITE_PASSWORD`, `BUZON_ADMIN_PASSWORD`,
+`BUZON_JWT_SECRET` and `BUZON_CLOUDFLARE_TOKEN`, or else in the keyring: the Secret Service
+under `service buzon key site-password`, `key admin-password`, `key jwt-secret` and
+`key cloudflare-token` on Linux, the Keychain under service `buzon`, accounts `site-password`,
+`admin-password`, `jwt-secret` and `cloudflare-token` on macOS. buzon reads the JWT secret only to push it with
 `buzon secrets push`, and writes it only when it makes a new one
 ([deploying.md](deploying.md#4-secrets)).
 
