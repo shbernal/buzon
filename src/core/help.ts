@@ -33,6 +33,7 @@ commands:
   upgrade   move to a newer release, asking before the backup, each db patch and the
             deploy: upgrade --to vX.Y.Z
   export-db dump the D1 database: [--out <dir>]  (keeps the last 12)
+  completion  print a shell completion script: completion <bash|zsh|fish>
 
 tiers: ste is one-shot, mte lives for a process, lte is tied to a real account.
 An <address> without @ gets the configured domain. A domain listed in \`routed\` in the

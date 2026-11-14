@@ -58,6 +58,14 @@ curl -fsSL https://github.com/shbernal/buzon/releases/latest/download/buzon-linu
 buzon reads its passwords from `BUZON_SITE_PASSWORD` and `BUZON_ADMIN_PASSWORD`, or else from
 the keyring: the Secret Service through `secret-tool` on Linux, the Keychain on macOS.
 
+Shell completion covers commands, flags, and the addresses and sites in the registry:
+
+```sh
+buzon completion bash > ~/.local/share/bash-completion/completions/buzon
+buzon completion zsh > "${fpath[1]}/_buzon"
+buzon completion fish > ~/.config/fish/completions/buzon.fish
+```
+
 No instance yet? [docs/deploying.md](docs/deploying.md) goes from a domain on Cloudflare to a
 running one, mostly through `buzon init --deploy`.
 
