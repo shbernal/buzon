@@ -20,6 +20,7 @@ export const COMMANDS = [
   'secrets',
   'upgrade',
   'export-db',
+  'completion',
 ] as const
 
 type Command = (typeof COMMANDS)[number]
@@ -47,7 +48,27 @@ async function createContext() {
   return { config, api: createApi(config), routing }
 }
 
+async function completeWords(words: string[]): Promise<void> {
+  const { complete } = await import('./core/complete.ts')
+  const { readRegistry } = await import('./core/registry.ts')
+  const { readConfig } = await import('./core/config.ts')
+  const entries = () => Object.entries(readRegistry().addresses)
+  const candidates = complete(words, {
+    addresses: () => entries().map(([address]) => address),
+    sites: () => [...new Set(entries().flatMap(([, entry]) => entry.site ?? []))],
+    domains: () => {
+      const config = readConfig()
+      return [config.domain, ...(config.routed ?? [])]
+    },
+  })
+  if (candidates.length > 0) console.log(candidates.join('\n'))
+}
+
 export async function run(argv: string[]): Promise<number> {
+  if (argv[0] === '__complete') {
+    await completeWords(argv.slice(1))
+    return 0
+  }
   const parsed = parseArgv(argv)
   const { command, flags } = parsed
   const json = flags.json === true
@@ -146,6 +167,15 @@ export async function run(argv: string[]): Promise<number> {
       if (command === 'export-db') {
         print(json, await commands.exportDb(parsed, context), commands.exportDbText)
       }
+      return 0
+    }
+    case 'completion': {
+      const { SHELLS, SCRIPTS } = await import('./core/complete.ts')
+      const shell = SHELLS.find((name) => name === parsed.positionals[0])
+      if (!shell || parsed.positionals.length > 1) {
+        throw new UsageError(`usage: buzon completion <${SHELLS.join('|')}>`)
+      }
+      console.log(SCRIPTS[shell])
       return 0
     }
     default:
